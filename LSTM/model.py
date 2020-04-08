@@ -25,7 +25,7 @@ import utils
 class RNNModel(nn.Module):
     """Container module with an encoder, a recurrent module, and a decoder."""
 
-    def __init__(self, rnn_type, ntoken, ninp, nhid, nlayers, dropout=0.5, tie_weights=False, eos_separator='<eos>':
+    def __init__(self, rnn_type, ntoken, ninp, nhid, nlayers, dropout=0.5, tie_weights=False, eos_separator='<eos>', cuda=True):
         super(RNNModel, self).__init__()
         self.drop = nn.Dropout(dropout)
         self.encoder = nn.Embedding(ntoken, ninp)
@@ -57,6 +57,7 @@ class RNNModel(nn.Module):
 
         self.backup = self.rnn.forward
         self.vocab = None
+        self.cuda = cuda
         self.param = {'rnn_type':rnn_type, 'ntoken':ntoken, 'ninp':ninp, 
                         'nhid':nhid, 'nlayers':nlayers, 'dropout':dropout, 
                         'tie_weights':tie_weights, 'eos_separator': eos_separator}
@@ -137,7 +138,7 @@ class RNNModel(nn.Module):
         out = None
         hidden = self.init_hidden(1)
         inp = torch.autograd.Variable(torch.LongTensor([[self.vocab.word2idx[self.eos_separator]]]))
-        if params.cuda:
+        if self.cuda:
             inp = inp.cuda()
         # Start extracting activations
         out, hidden = self(inp, hidden)
@@ -176,7 +177,7 @@ class RNNModel(nn.Module):
         # we extract the values of the parameters arguments while processing the real
         # word: item.
         inp = torch.autograd.Variable(torch.LongTensor([[self.vocab.word2idx[item]]]))
-        if params.cuda:
+        if self.cuda:
             inp = inp.cuda()
         # The forward function has been hacked -> gates values and cell/hidden states 
         # are saved in self.rnn.gates.
