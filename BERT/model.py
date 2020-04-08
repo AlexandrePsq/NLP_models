@@ -1,60 +1,70 @@
-################################################################
-# BERT Language Model
-################################################################
+"""
+General Language Model based on BERT architecture.
+The model can implement either:
+    - BERT-base,
+    - BERT-large,
+    - or a pre-trained BERT architecture.
+This class implements methods to retrieve hidden state or/and
+attention heads activations.
+"""
+
+
 import sys
 import os
-
-root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-if root not in sys.path:
-    sys.path.append(root)
-
 
 import pandas as pd
 import numpy as np
 import torch
-from pytorch_transformers import BertTokenizer, BertModel, BertForMaskedLM, WordpieceTokenizer
-from . import utils
-from .tokenizer import tokenize 
-
-
-parameters = {'base':{'LAYER_COUNT':12, 'FEATURE_COUNT':768},
-                'large':{'LAYER_COUNT':24, 'FEATURE_COUNT':1024}
-            }
+from transformers import BertTokenizer, BertModel
+import utils
+from tokenizer import tokenize 
 
 
 
 class BERT(object):
     """Container module for BERT."""
 
-    def __init__(self, bert_model, language, name, loi):
+    def __init__(self, pretrained_bert_model, language, name, loi, prediction_level):
         super(BERT, self).__init__()
         # Load pre-trained model tokenizer (vocabulary)
         # Crucially, do not do basic tokenization; PTB is tokenized. Just do wordpiece tokenization.
-        if bert_model not in ['base', 'large']:
-            raise ValueError("BERT model must be base or large")
-        self.model = BertModel.from_pretrained('bert-{}-cased'.format(bert_model), output_hidden_states=True)
-        self.tokenizer = BertTokenizer.from_pretrained('bert-{}-cased'.format(bert_model))
+        self.model = BertModel.from_pretrained(pretrained_bert_model, output_hidden_states=True, output_attentions=True)
+        self.tokenizer = BertTokenizer.from_pretrained(pretrained_bert_model)
         
         self.language = language
-        self.LAYER_COUNT = parameters[bert_model]['LAYER_COUNT']
-        self.FEATURE_COUNT = parameters[bert_model]['FEATURE_COUNT']
+        self.NUM_HIDDEN_LAYERS = self.model.config['num_hidden_layers']
+        self.FEATURE_COUNT = self.model.config['hidden_size']
+        self.NUM_ATTENTION_HEADS = self.model.config['num_attention_heads']
         self.name = name
-        self.generation = self.name.split('-')[2].strip()
-        self.loi = np.array(loi) if loi else np.arange(1 + parameters[bert_model]['LAYER_COUNT']) # loi: layers of interest
+        self.prediction_level = prediction_level
+        self.loi = np.array(loi) if loi else np.arange(1 + self.NUM_HIDDEN_LAYERS) # loi: layers of interest
 
     def __name__(self):
+        """ Retrieve Bert instance name."""
         return self.name
 
 
-    def generate(self, path, language, textgrid):
-        """ Input text should have one sentence per line, where each word and every 
+    def generate(self, iterator, language):
+        """ Extract hidden state activations of the model for each token from the input, on a 
+        word-by-word predictions or sentence-by-sentence prediction.
+        Optionally includes surprisal and entropy.
+        Input text should have one sentence per line, where each word and every 
         symbol is separated from the following by a space. No <eos> token should be included,
         as they are automatically integrated during tokenization.
+        Arguments: 
+            - iterator: iterator object, 
+            generally: iterator = tokenize(path, language, self.vocab)
+            - includ_surprisal: bool specifying if we include surprisal
+            - includ_entropy: bool specifying if we include entropy
+            - parameters: list (of string representing gate names)
+        Returns:
+            - result: pd.DataFrame containing activation (+ optionally entropy
+            and surprisal)
+        # iterator = tokenize(path, language, path_like=True, train=False)
         """
         activations = []
         self.model.eval()
-        iterator = tokenize(path, language, path_like=True, train=False)
-        if self.generation == 'bucket':
+        if self.prediction_level == 'sentence':
             # Here, we give as input the text line by line.
             for line in iterator:
                 line = line.strip() # Remove trailing characters
@@ -75,7 +85,7 @@ class BERT(object):
                     encoded_layers = np.vstack(encoded_layers[2]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
                     encoded_layers = encoded_layers[self.loi, :, :]
                     activations += utils.extract_activations_from_tokenized(encoded_layers, mapping)
-        elif self.generation == 'sequential':
+        elif self.prediction_level == 'word':
             # Here we give as input the sentence up to the actual word, incrementing by one at each step.
             for line in iterator:
                 for index in range(1, len(line.split())):
