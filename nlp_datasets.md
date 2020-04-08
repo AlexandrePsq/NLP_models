@@ -1,6 +1,6 @@
 # NLP datasets #
 
-Here are regrouped Open-Source datasets for various NLP tasks in English, French and Multi-Languages.
+Here are regrouped links to Open-Source datasets for various NLP tasks in English, French and Multi-Languages.
 
 
 
