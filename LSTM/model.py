@@ -1,35 +1,31 @@
-################################################################
-# General Language Model including :
-#   - an embedding layer
-#   - LSTM layers: (nlayers, nhidden)
-#
-################################################################
+"""
+General Language Model based on recurrent neural network models
+with the following architecture:
+    Encoder -> RNN -> Decoder
+The RNN model can implement either:
+    - a GRU
+    - or an LSTM
+"""
+
+
 import sys
 import os
-
-root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-if root not in sys.path:
-    sys.path.append(root)
-
 
 import torch
 from tqdm import tqdm
 import torch.nn as nn
 import pandas as pd
 import numpy as np
-from .data import Corpus, Dictionary
-from .tokenizer import tokenize
-from utilities.settings import Params
-from . import utils
+from data import Corpus, Dictionary
+from tokenizer import tokenize
+import utils
 
-
-params = Params()
 
 
 class RNNModel(nn.Module):
     """Container module with an encoder, a recurrent module, and a decoder."""
 
-    def __init__(self, rnn_type, ntoken, ninp, nhid, nlayers, dropout=0.5, tie_weights=False):
+    def __init__(self, rnn_type, ntoken, ninp, nhid, nlayers, dropout=0.5, tie_weights=False, eos_separator='<eos>':
         super(RNNModel, self).__init__()
         self.drop = nn.Dropout(dropout)
         self.encoder = nn.Embedding(ntoken, ninp)
@@ -61,28 +57,54 @@ class RNNModel(nn.Module):
 
         self.backup = self.rnn.forward
         self.vocab = None
-        self.param = {'rnn_type':rnn_type, 'ntoken':ntoken, 'ninp':ninp, 'nhid':nhid, 'nlayers':nlayers, 'dropout':dropout, 'tie_weights':tie_weights}
+        self.param = {'rnn_type':rnn_type, 'ntoken':ntoken, 'ninp':ninp, 
+                        'nhid':nhid, 'nlayers':nlayers, 'dropout':dropout, 
+                        'tie_weights':tie_weights, 'eos_separator': eos_separator}
     
     def init_vocab(self, path, language):
+        """ Initialize an instance of Dictionary, which create
+        (or retrieve) the dictionary associated with the data used.
+        """
         self.vocab = Dictionary(path, language)
 
     def __name__(self):
+        """ Define the name of the instance of RNNModel using
+        its arguments.
+        """
         return '_'.join([self.param['rnn_type'], 'embedding-size', str(self.param['ninp']),'nhid', str(self.param['nhid']), 'nlayers', str(self.param['nlayers']), 'dropout', str(self.param['dropout']).replace('.', '')])
 
     def init_weights(self):
+        """ Initialize the weights of the model using 
+        an uniform distribution and zero for the bias 
+        of the decoder.
+        """
         initrange = 0.1
         self.encoder.weight.data.uniform_(-initrange, initrange)
         self.decoder.bias.data.zero_()
         self.decoder.weight.data.uniform_(-initrange, initrange)
 
-    def forward(self, input, hidden):
-        emb = self.drop(self.encoder(input))
+    def forward(self, inp, hidden):
+        """ Concatenate the encoder, the recurrent neural 
+        network model and the decoder.
+        Arguments:
+            - inp: torch.Variable (last predicted vector, or initializer token)
+            - hidden: torch.Variable (last hidden state vector)
+        Returns:
+            - 
+        """
+        emb = self.drop(self.encoder(inp))
         output, hidden = self.rnn(emb, hidden)
         output = self.drop(output)
         decoded = self.decoder(output.view(output.size(0)*output.size(1), output.size(2)))
         return decoded.view(output.size(0), output.size(1), decoded.size(1)), hidden
 
     def init_hidden(self, bsz):
+        """ Initialize to zeros the hidden state/cell.
+        Arguments:
+            - bsz: int, batch size
+        Returns:
+            - torch.Variable (or tuple of torch.Variable)
+        """
         weight = next(self.parameters())
         if self.param['rnn_type'] == 'LSTM':
             return (weight.new_zeros(self.param['nlayers'], bsz, self.param['nhid']),
@@ -90,7 +112,19 @@ class RNNModel(nn.Module):
         else:
             return weight.new_zeros(self.param['nlayers'], bsz, self.param['nhid'])
 
-    def generate(self, path, language, includ_surprisal=params.pref.surprisal, includ_entropy=params.pref.entropy, parameters=params.pref.extracted_parameters):
+    def generate(self, iterator, includ_surprisal=False, includ_entropy=False, parameters=['in', 'forget', 'out', 'c_tilde', 'hidden', 'cell']):
+        """ Extract hidden state activations of the model for each token from the input.
+        Optionally includes surprisal and entropy.
+        Arguments: 
+            - iterator: iterator object, 
+            generally: iterator = tokenize(path, language, self.vocab)
+            - includ_surprisal: bool specifying if we include surprisal
+            - includ_entropy: bool specifying if we include entropy
+            - parameters: list (of string representing gate names)
+        Returns:
+            - result: pd.DataFrame containing activation (+ optionally entropy
+            and surprisal)
+        """
         parameters = sorted(parameters)
         # hack the forward function to send an extra argument containing the model parameters
         self.rnn.forward = lambda input, hidden: utils.forward(self.rnn, input, hidden, self.param)
@@ -98,13 +132,14 @@ class RNNModel(nn.Module):
         activations = []
         surprisals = []
         entropies = []
-        iterator = tokenize(path, language, self.vocab)
-        last_item = params.eos_separator
+        # Initialiazing variables
+        last_item = self.eos_separator
         out = None
         hidden = self.init_hidden(1)
-        inp = torch.autograd.Variable(torch.LongTensor([[self.vocab.word2idx[params.eos_separator]]]))
+        inp = torch.autograd.Variable(torch.LongTensor([[self.vocab.word2idx[self.eos_separator]]]))
         if params.cuda:
             inp = inp.cuda()
+        # Start extracting activations
         out, hidden = self(inp, hidden)
         for item in tqdm(iterator):
             activation, surprisal, entropy, (out, hidden) = self.extract_activations(item, last_item=last_item, out=out, hidden=hidden, parameters=parameters)
@@ -120,14 +155,34 @@ class RNNModel(nn.Module):
         return result
     
     def extract_activations(self, item, last_item, out=None, hidden=None, parameters=['hidden']):
+        """ Extract activations/surprisal/entropy for the processing of a given word.
+        Arguments:
+            - item: string (current real word)
+            - last_item: string (last real word)
+            - out: torch.Variable (last predicted output vector)
+            - hidden: torch.Variable (last hidden state vector)
+            - parameters: list (of string representing gate names)
+        Returns:
+            - activation: np.array (concatenated hidden state representation)
+            - surprisal: np.array
+            - entropy: np.array
+            - (out, hidden): (torch.Variable, torch.Variable), (new predicted output, new hidden state)
+        """
         activation = []
+        # Surprisal is equal to the opposite of the probability that the correct word is 
+        # predicted (+1)
         out = torch.nn.functional.log_softmax(out[0]).unsqueeze(0)
         surprisal = -out[0, 0, self.vocab.word2idx[item]].item()
+        # we extract the values of the parameters arguments while processing the real
+        # word: item.
         inp = torch.autograd.Variable(torch.LongTensor([[self.vocab.word2idx[item]]]))
         if params.cuda:
             inp = inp.cuda()
+        # The forward function has been hacked -> gates values and cell/hidden states 
+        # are saved in self.rnn.gates.
         out, hidden = self(inp, hidden)
         pk = torch.nn.functional.softmax(out[0]).unsqueeze(0).detach().cpu().numpy()[0][0]
+        # Entropy is a measure of the certainty of the network's prediction.
         entropy = -np.sum(pk * np.log2(pk), axis=0)
         for param in parameters:
             activation.append(self.rnn.gates[param].data.view(1,1,-1).cpu().numpy()[0][0])
