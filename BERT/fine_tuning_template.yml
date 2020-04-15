@@ -14,9 +14,10 @@ seed: 1111 # Seed for reproductibility
 output_dir: ./checkpoints
 
 # Datasets
+corpus_name: COLA
 dataset: "./cola_public/" # Path to the folder containing the dataset to use for fine-tuning
-delimiter:
-header:
+delimiter: '\t'
+header: 
 names: ['sentence_source', 'label', 'label_notes', 'sentence']
 
 # Data Loader
