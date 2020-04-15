@@ -48,15 +48,7 @@ def get_inputs_tensors(sentences, labels, tokenizer, max_length=128):
     input_ids = []
     attention_masks = []
 
-    # For every sentence...
     for sent in sentences:
-        # `encode_plus` will:
-        #   (1) Tokenize the sentence.
-        #   (2) Prepend the `[CLS]` token to the start.
-        #   (3) Append the `[SEP]` token to the end.
-        #   (4) Map tokens to their IDs.
-        #   (5) Pad or truncate the sentence to `max_length`
-        #   (6) Create attention masks for [PAD] tokens.
         encoded_dict = tokenizer.encode_plus(
                             sent,                      # Sentence to encode.
                             add_special_tokens = True, # Add '[CLS]' and '[SEP]'
@@ -68,7 +60,6 @@ def get_inputs_tensors(sentences, labels, tokenizer, max_length=128):
         
         # Add the encoded sentence to the list.    
         input_ids.append(encoded_dict['input_ids'])
-        
         # And its attention mask (simply differentiates padding from non-padding).
         attention_masks.append(encoded_dict['attention_mask'])
 
