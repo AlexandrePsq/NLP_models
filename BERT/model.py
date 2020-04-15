@@ -24,11 +24,11 @@ from tokenizer import tokenize
 class BERT(object):
     """Container module for BERT."""
 
-    def __init__(self, pretrained_bert_model, language, name, loi, prediction_level):
+    def __init__(self, pretrained_bert_model, language, name, loi, prediction_level, output_hidden_states, output_attentions):
         super(BERT, self).__init__()
         # Load pre-trained model tokenizer (vocabulary)
         # Crucially, do not do basic tokenization; PTB is tokenized. Just do wordpiece tokenization.
-        self.model = BertModel.from_pretrained(pretrained_bert_model, output_hidden_states=True, output_attentions=True)
+        self.model = BertModel.from_pretrained(pretrained_bert_model, output_hidden_states=output_hidden_states, output_attentions=output_attentions)
         self.tokenizer = BertTokenizer.from_pretrained(pretrained_bert_model)
         
         self.language = language
@@ -62,7 +62,8 @@ class BERT(object):
             and surprisal)
         # iterator = tokenize(path, language, path_like=True, train=False)
         """
-        activations = []
+        attentions_activations = []
+        hidden_states_activations = []
         self.model.eval()
         if self.prediction_level == 'sentence':
             # Here, we give as input the text line by line.
@@ -80,12 +81,21 @@ class BERT(object):
                 segments_tensors = torch.tensor([segment_ids])
 
                 with torch.no_grad():
-                    encoded_layers = self.model(tokens_tensor, segments_tensors) # last_hidden_state, pooled_last_hidden_states, all_hidden_states
+                    encoded_layers = self.model(tokens_tensor, segments_tensors) # last_hidden_state, pooler_output, hidden_states, attentions
+                    # last_hidden_state dimension: (batch_size, sequence_length, hidden_size)
+                    # pooler_output dimension: (batch_size, hidden_size)
+                    # hidden_states dimension: num_layers * (batch_size, sequence_length, hidden_size)
+                    # attentions dimension: num_layers * (batch_size, num_heads, sequence_length, sequence_length)
                     # filtration
-                    encoded_layers = np.vstack(encoded_layers[2]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
-                    encoded_layers = encoded_layers[self.loi, :, :]
-                    activations += utils.extract_activations_from_tokenized(encoded_layers, mapping)
-        elif self.prediction_level == 'word':
+                    if self.model.config.output_hidden_states:
+                        hidden_states_activations_ = np.vstack(encoded_layers[2]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
+                        hidden_states_activations_ = hidden_states_activations_[self.loi, :, :]
+                        hidden_states_activations += utils.extract_hidden_state_activations_from_tokenized(hidden_states_activations_, mapping)
+                    if self.model.config.output_attentions:
+                        attentions_activations_ = np.vstack(encoded_layers[3])
+                        attentions_activations_ = attentions_activations_[self.loi, :, :]
+                        attentions_activations += utils.extract_attention_head_activations_from_tokenized(attentions_activations_, mapping)
+        elif self.prediction_level == 'sequential':
             # Here we give as input the sentence up to the actual word, incrementing by one at each step.
             for line in iterator:
                 for index in range(1, len(line.split())):
@@ -105,8 +115,14 @@ class BERT(object):
                     with torch.no_grad():
                         encoded_layers = self.model(tokens_tensor, segments_tensors) # dimension = layer_count * len(tokenized_text) * feature_count
                         # filtration
-                        encoded_layers = np.vstack(encoded_layers[2])
-                        encoded_layers = encoded_layers[self.loi, :, :]
-                        activations.append(utils.extract_activations_from_tokenized(encoded_layers, mapping)[-1])
-        result = pd.DataFrame(np.vstack(activations), columns=['layer-{}-{}'.format(layer, index) for layer in self.loi for index in range(self.FEATURE_COUNT)])
-        return result
+                        if self.model.config.output_hidden_states:
+                            hidden_states_activations_ = np.vstack(encoded_layers[2]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
+                            hidden_states_activations_ = hidden_states_activations_[self.loi, :, :]
+                            hidden_states_activations.append(utils.extract_hidden_state_activations_from_tokenized(hidden_states_activations_, mapping)[-1])
+                        if self.model.config.output_attentions:
+                            attentions_activations_ = np.vstack(encoded_layers[3])
+                            attentions_activations_ = attentions_activations_[self.loi, :, :]
+                            attentions_activations.append(utils.extract_attention_head_activations_from_tokenized(attentions_activations_, mapping)[-1])
+        hidden_states_activations = pd.DataFrame(np.vstack(hidden_states_activations), columns=['hidden_state-layer-{}-{}'.format(layer, index) for layer in self.loi for index in range(self.FEATURE_COUNT)])
+        attentions_activations = pd.DataFrame(np.vstack(attentions_activations), columns=['attention-layer-{}-{}'.format(layer, index) for layer in self.loi for index in range(self.FEATURE_COUNT)])
+        return hidden_states_activations, attentions_activations
