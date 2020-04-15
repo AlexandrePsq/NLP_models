@@ -1,0 +1,42 @@
+#####
+# From Appendix A.3 of the BERT paper, when fine-tuning BERT on a specific task, 
+# the authors recommend:
+#     - Batch size: 16, 32
+#     - Learning rate (Adam): 5e-5, 3e-5, 2e-5
+#     - Number of epochs: 2, 3, 4
+#     - eps = 1e-8
+#####
+
+
+# General
+task: NER # Task on which to fine-tune the model
+seed: 1111 # Seed for reproductibility
+output_dir: ./checkpoints
+
+# Datasets
+dataset: "./cola_public/" # Path to the folder containing the dataset to use for fine-tuning
+delimiter:
+header:
+names: ['sentence_source', 'label', 'label_notes', 'sentence']
+
+# Data Loader
+train_size_percentage: 0.9
+batch_size: 32
+
+# Model & Tokenizer
+pretrained_model: bert-base-cased # Name of (or path to) the pre-trained BERT model to use
+pretrained_tokenizer: bert-base-cased # Name of (or path to) the pre-trained BERT tokenizer to use
+num_labels: 2
+output_attentions: True
+output_hidden_states: True
+
+# Optimizer
+learning_rate: 2e-5, # Default is 5e-5
+adam_epsilon: 1e-8 # Adam_epsilon  - default is 1e-8.
+
+# Scheduler
+num_warmup_steps: 0 # Default value in run_glue.py
+
+# Training
+nb_epochs: 3 # BERT authors recommended between 2 and 4
+nb_intermediary_steps_to_save: 25 # number of checkpoints at which to save model state
