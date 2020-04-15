@@ -5,6 +5,9 @@ We implemented classes that enable information extraction from various  NLP mode
 We also included methods to train the models used in the classes, as well as related tokenizers.
 
 Are present:
-- BERT (base, large)
-- GPT-2 (base, large)
+- BERT 
+- GPT-2 
 - LSTM
+TO DO:
+- XLNET
+- Transformer-XL
