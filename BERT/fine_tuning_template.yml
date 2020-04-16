@@ -9,13 +9,14 @@
 
 
 # General
-task: NER # Task on which to fine-tune the model
+task: sentence-classification # Task on which to fine-tune the model ['POS-tagging', 'NER', 'sentiment-analysis', 'sentence-classification']
 seed: 1111 # Seed for reproductibility
-output_dir: ./checkpoints
+output_dir: ./sentence_classification_COLA_bert_base_cased
+log_file: logs.txt
 
 # Datasets
 corpus_name: COLA
-dataset: "./cola_public/" # Path to the folder containing the dataset to use for fine-tuning
+dataset: "./datasets/cola_public/raw" # Path/URL to the folder containing the dataset to use for fine-tuning
 delimiter: '\t'
 header: 
 names: ['sentence_source', 'label', 'label_notes', 'sentence']
@@ -30,6 +31,7 @@ pretrained_tokenizer: bert-base-cased # Name of (or path to) the pre-trained BER
 num_labels: 2
 output_attentions: True
 output_hidden_states: True
+max_length: 128
 
 # Optimizer
 learning_rate: 2e-5 # Default is 5e-5
