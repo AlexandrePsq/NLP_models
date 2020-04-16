@@ -204,7 +204,7 @@ def train(model, train_dataloader, validation_dataloader, optimizer, scheduler, 
                 elapsed = format_time(time.time() - t0)
                 # Report progress.
                 print('  Batch {:>5,}  of  {:>5,}.    Elapsed: {:}.'.format(step, len(train_dataloader), elapsed))
-            #total_train_loss = training_step(model, optimizer, scheduler, batch, device, total_train_loss)
+            total_train_loss = training_step(model, optimizer, scheduler, batch, device, total_train_loss)
 
         # Calculate the average loss over all of the batches.
         avg_train_loss = total_train_loss / len(train_dataloader)            
