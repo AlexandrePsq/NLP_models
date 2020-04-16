@@ -26,6 +26,15 @@ from transformers import BertTokenizer, BertModel, BertForPreTraining, BertForMa
 ############ Basic functions ############
 #########################################
 
+def check_folder(path):
+    """Create adequate folders if necessary."""
+    try:
+        if not os.path.isdir(path):
+            check_folder(os.path.dirname(path))
+            os.mkdir(path)
+    except:
+        pass
+    
 def read_yaml(yaml_path):
     """Open and read safely a yaml file."""
     with open(yaml_path, 'r') as stream:
@@ -93,21 +102,34 @@ def fetch_dataset_from_url(url, local_path):
         except Exception:
             raise Exception("Invalid URL: {}".format(url))
     # Unzip the dataset (if we haven't already)
-    os.system("unzip {}".format(local_path))
+    os.system("unzip {} -d ./datasets".format(local_path))
+    os.system("rm {}".format(local_path))
+    # return path to the new dataset
+    list_of_files = glob.glob('./datasets/*')
+    latest_folder = max(list_of_files, key=os.path.getctime)
+    return latest_folder
 
 def fetch_data(path, local_path=None, **kwargs):
+    """ Fetch data.   :)
+    """
+    train, test = None, None
     if os.path.exists(path):
         try:
             train_file = sorted(glob.glob(os.path.join(path, '*train*')))[0]
-            test_file = sorted(glob.glob(os.path.join(path, '*test*')))[0]
-            train = pd.read_csv(train_file, **kwargs)
-            test = pd.read_csv(test_file, **kwargs)
+            train = pd.read_csv(train_file, engine='python', **kwargs)
         except:
-            raise FileExistsError("Verify that you have a train and test file in {}".format(path))
+            raise FileExistsError("Verify that your train file is in {}. Name should included 'train'.\nOr modify your yaml file.".format(path))
+        try:
+            test_file = sorted(glob.glob(os.path.join(path, '*test*')))[0]
+            test = pd.read_csv(test_file, engine='python', **kwargs)
+        except:
+            print("Verify that your test file is in {}. Name should included 'test'.\nOr modify your yaml file.".format(path))
     else:
         local_path = local_path if local_path else "./data"
-        fetch_dataset_from_url(path, local_path)
-        train, test = fetch_data(local_path, **kwargs)
+        latest_folder = fetch_dataset_from_url(path, local_path)
+        print('Lastest downloaded dataset: {}\n'.format(latest_folder))
+        print(os.listdir(latest_folder))
+        train, test = fetch_data(latest_folder, **kwargs)
     return train, test
 
 def save(model, tokenizer, output_dir):
