@@ -11,6 +11,7 @@ import glob
 import torch
 import random
 import inspect
+import logging
 import datetime
 import argparse
 import numpy as np
@@ -24,7 +25,7 @@ from transformers import BertForQuestionAnswering, AdamW, BertConfig, get_linear
 from transformers import BertForNextSentencePrediction, BertForSequenceClassification, BertForTokenClassification
 from transformers import BertTokenizer, BertModel, BertForPreTraining, BertForMaskedLM, WEIGHTS_NAME, CONFIG_NAME
 
-from utils import read_yaml, set_seed, format_time, filter_args, get_device, fetch_dataset_from_url, fetch_data, save
+from utils import read_yaml, set_seed, format_time, filter_args, get_device, fetch_dataset_from_url, fetch_data, save, check_folder
 
 
 #########################################
@@ -148,10 +149,11 @@ def training_step(model, optimizer, scheduler, batch, device, total_train_loss):
 
     # The documentation for the BERT `model` are here: 
     # https://huggingface.co/transformers/v2.2.0/model_doc/bert.html
-    loss, logits = model(b_input_ids, 
+    outputs = model(b_input_ids, 
                         token_type_ids=None, 
                         attention_mask=b_input_mask, 
                         labels=b_labels)
+    loss = outputs[0] 
 
     # The `.item()` function just returns the Python value 
     # from the tensor.
@@ -202,7 +204,7 @@ def train(model, train_dataloader, validation_dataloader, optimizer, scheduler, 
                 elapsed = format_time(time.time() - t0)
                 # Report progress.
                 print('  Batch {:>5,}  of  {:>5,}.    Elapsed: {:}.'.format(step, len(train_dataloader), elapsed))
-            avg_train_loss = training_step(model, optimizer, scheduler, batch, device, total_train_loss)
+            #total_train_loss = training_step(model, optimizer, scheduler, batch, device, total_train_loss)
 
         # Calculate the average loss over all of the batches.
         avg_train_loss = total_train_loss / len(train_dataloader)            
@@ -254,20 +256,18 @@ def evaluate(model, validation_dataloader, device):
         with torch.no_grad():        
             # The documentation for the BERT `models` are here: 
             # https://huggingface.co/transformers/v2.2.0/model_doc/bert.html
-            (loss, logits) = model(b_input_ids, 
-                                token_type_ids=None, 
-                                attention_mask=b_input_mask,
-                                labels=b_labels)
-            
+            outputs = model(b_input_ids, 
+                                   token_type_ids=None, 
+                                   attention_mask=b_input_mask,
+                                   labels=b_labels)
+        loss = outputs[0] 
+        logits = outputs[1]
         # Accumulate the validation loss.
         total_eval_loss += loss.item()
 
         # Move logits and labels to CPU
-        logits = logits.detach()
-        label_ids = b_labels
-        if device=='cuda':
-            logits = logits.cpu().numpy()
-            label_ids = label_ids.to('cpu').numpy()
+        logits = logits.detach().cpu().numpy()
+        label_ids = b_labels.to('cpu').numpy()
 
         # Calculate the accuracy for this batch of test sentences, and
         # accumulate it over all batches.
@@ -292,9 +292,10 @@ def evaluate(model, validation_dataloader, device):
 ########## Reporting functions ##########
 #########################################
 
-def plots_train_val_loss(training_stats, nb_epochs):
+def plots_train_val_loss(training_stats, nb_epochs, output_path):
     """ Plot train and validation losses over fine-tuning.
     """
+    df = pd.DataFrame(data=training_stats)
     # Use plot styling from seaborn.
     sns.set(style='darkgrid')
 
@@ -303,8 +304,8 @@ def plots_train_val_loss(training_stats, nb_epochs):
     plt.rcParams["figure.figsize"] = (12,6)
 
     # Plot the learning curve.
-    plt.plot(training_stats['Training Loss'], 'b-o', label="Training")
-    plt.plot(training_stats['Valid. Loss'], 'g-o', label="Validation")
+    plt.plot(df['Training Loss'], 'b-o', label="Training")
+    plt.plot(df['Valid. Loss'], 'g-o', label="Validation")
 
     # Label the plot.
     plt.title("Training & Validation Loss")
@@ -312,7 +313,7 @@ def plots_train_val_loss(training_stats, nb_epochs):
     plt.ylabel("Loss")
     plt.legend()
     plt.xticks(np.arange(1, nb_epochs + 1))
-
+    plt.savefig(output_path)
     plt.show()
 
 
@@ -331,14 +332,22 @@ if __name__=='__main__':
 
     # Fetch parameters
     parameters = read_yaml(args.yaml_file)
-    # Set seed for reproductibility 
+    check_folder(parameters['output_dir'])
+    logging.basicConfig(filename=os.path.join(parameters['output_dir'], parameters['log_file']), filemode='w+', level=logging.INFO)
+    logging.info("Parameters fetched.")
+    logging.info("Setting seed for reproductibility...") 
     set_seed(parameters['seed'])
-    # Retrieve the device on which to run
+    logging.info("\tDone.")
+    logging.info("Retrieving the device on which to run...")
     device = get_device()
-    # Fetch data (training + validation) and parameters
-    kwargs = filter_args(fetch_data, parameters)
-    data = fetch_data(parameters['dataset'], **kwargs)
-    # Fetch pre-trained Bert model and Tokenizer
+    logging.info("\tDone.")
+    logging.info("Fetching data (training + validation) and parameters...")
+    kwargs = filter_args(pd.read_csv, parameters)
+    data, _ = fetch_data(parameters['dataset'], **kwargs) # ’_’ because we do not test
+    logging.info("\tDone.")
+    logging.info("Fetching pre-trained Bert model: {} and Tokenizer: {} for the task: {}...".format(parameters['pretrained_model'],
+                                                                                                    parameters['pretrained_tokenizer'],
+                                                                                                    parameters['task']))
     if parameters['task'] in ['POS-tagging', 'NER']:
         model = BertForTokenClassification.from_pretrained(
                     parameters['pretrained_model'],
@@ -346,7 +355,7 @@ if __name__=='__main__':
                     output_attentions=parameters['output_attentions'], # Whether the model returns attentions weights.
                     output_hidden_states=parameters['output_hidden_states'], # Whether the model returns all hidden-states.
         )
-    elif parameters['task'] in ['sentiment-analysis']:
+    elif parameters['task'] in ['sentiment-analysis', 'sentence-classification']:
         model = BertForSequenceClassification.from_pretrained(
                     parameters['pretrained_model'],
                     num_labels=parameters['num_labels'], # The number of output labels for classification.  
@@ -354,22 +363,26 @@ if __name__=='__main__':
                     output_hidden_states=parameters['output_hidden_states'], # Whether the model returns all hidden-states.
         )
     tokenizer = BertTokenizer.from_pretrained(parameters['pretrained_tokenizer'])
-    # Extract inputs from data
+    logging.info("\tDone.")
+    logging.info("Extracting inputs from data...")
     sentences, labels = extract_inputs(data, parameters['corpus_name'])
-    # Transforms former inputs to input tensors for Pytorch model
-    input_ids, attention_masks, labels = get_inputs_tensors(sentences, labels, tokenizer, max_length=128)
-    # Create data loaders
+    logging.info("\tDone.")
+    logging.info("Transforming former inputs to input tensors for Pytorch model.")
+    input_ids, attention_masks, labels = get_inputs_tensors(sentences, labels, tokenizer, max_length=parameters['max_length'])
+    logging.info("\tDone.")
+    logging.info("Creating data loaders...")
     train_dataloader, validation_dataloader = get_data_loaders(
                                                 input_ids, 
                                                 attention_masks, 
                                                 labels, 
                                                 train_size_percentage=parameters['train_size_percentage'], 
                                                 batch_size=parameters['batch_size'])
-    # Create optimizer and learning rate scheduler
+    logging.info("\tDone.")
+    logging.info("Creating optimizer and learning rate scheduler...")
     optimizer = AdamW(
                     model.parameters(),
-                    lr=parameters['learning_rate'],
-                    eps=parameters['adam_epsilon']
+                    lr=float(parameters['learning_rate']),
+                    eps=float(parameters['adam_epsilon'])
                 )
     
     total_steps = len(train_dataloader) * parameters['nb_epochs'] # Total number of training steps is [nb batches] x [nb epochs]. 
@@ -378,7 +391,8 @@ if __name__=='__main__':
                     num_warmup_steps=parameters['num_warmup_steps'],
                     num_training_steps=total_steps
                 )
-    # Fine-tune the model
+    logging.info("\tDone.")
+    logging.info("Fine-tuning the model.")
     training_stats = train(model,
                             train_dataloader, 
                             validation_dataloader, 
@@ -386,6 +400,10 @@ if __name__=='__main__':
                             scheduler, 
                             device, 
                             parameters['nb_epochs'])
-    # Save fine-tuned model and save it
-    save(model, tokenizer, parameters['output_dir'])
-    plots_train_val_loss(training_stats, parameters['nb_epochs'])
+    logging.info("\tDone.")
+    logging.info("Saving fine-tuned model...")
+    save(model, tokenizer, os.path.join(parameters['output_dir'], 'checkpoints'))
+    logging.info("\tDone.")
+    logging.info("Plotting training and validation losses...")
+    plots_train_val_loss(training_stats, parameters['nb_epochs'], os.path.join(parameters['output_dir'], 'train_val_loss.png'))
+    logging.info("\tDone.")
