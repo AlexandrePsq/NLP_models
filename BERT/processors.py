@@ -1,6 +1,7 @@
 import os
 import time
 import torch
+import numpy as np
 from utils import format_time
 
 from dataset import Dataset, InputExample, InputFeatures
@@ -44,7 +45,7 @@ class DataProcessor(object):
 class ModelProcessor(object):
     """Base class for model training/validation and evaluation."""
 
-    def __init__(self, model, optimizer, tokenizer, scheduler, device, nb_epochs=3, nb_checkpoints=24):
+    def __init__(self, model, optimizer=None, tokenizer=None, scheduler=None, device=None, metric_name=None, nb_epochs=3, nb_checkpoints=24):
         self.model = model
         self.optimizer = optimizer
         self.tokenizer = tokenizer
@@ -52,6 +53,7 @@ class ModelProcessor(object):
         self.device = device
         self.nb_checkpoints = nb_checkpoints
         self.nb_epochs = nb_epochs
+        self.metric_name = metric_name
 
 
     #########################################
@@ -152,7 +154,7 @@ class ModelProcessor(object):
             print("\n  Average training loss: {0:.2f}".format(avg_train_loss))
             print("  Training epcoh took: {:}".format(training_time))
                 
-            avg_val_accuracy, avg_val_loss, validation_time = self.evaluate(validation_dataloader)        
+            avg_val_accuracy, avg_val_loss, validation_time, report = self.evaluate(validation_dataloader)        
 
             # Record all statistics from this epoch.
             training_stats.append(
@@ -162,14 +164,15 @@ class ModelProcessor(object):
                     'Valid. Loss': avg_val_loss,
                     'Valid. Accur.': avg_val_accuracy,
                     'Training Time': training_time,
-                    'Validation Time': validation_time
+                    'Validation Time': validation_time,
+                    'report': report
                 }
             )
         print("\nTraining complete!")
         print("Total training took {:} (h:mm:ss)".format(format_time(time.time()-total_t0)))
         return training_stats
 
-    def evaluate(self, validation_dataloader):
+    def evaluate(self, dataloader):
         """ Evaluate a model on a validation dataloader.
         """
         print("Running Validation...")
@@ -180,9 +183,11 @@ class ModelProcessor(object):
         total_eval_accuracy = 0
         total_eval_loss = 0
         nb_eval_steps = 0
+        y_true = []
+        y_pred = []
 
         # Evaluate data for one epoch
-        for batch in validation_dataloader:
+        for batch in dataloader:
             # `batch` contains three pytorch tensors:
             #   [0]: input ids 
             #   [1]: attention masks
@@ -191,6 +196,7 @@ class ModelProcessor(object):
             attention_mask = batch[1].to(self.device)
             token_type_ids = batch[2].to(self.device)
             label_ids = batch[3].to(self.device)
+            output_mask = batch[4].to(self.device)
             
             with torch.no_grad():        
                 # The documentation for the BERT `models` are here: 
@@ -207,22 +213,30 @@ class ModelProcessor(object):
             # Move logits and labels to CPU
             logits = logits.detach().cpu().numpy()
             label_ids = label_ids.to('cpu').numpy()
+            output_mask = label_ids.to('cpu').numpy()
+            pred_flat = np.argmax(logits, axis=-1)[output_mask].flatten()
+            labels_flat = label_ids[output_mask].flatten()
+            y_true.append(labels_flat)
+            y_pred.append(pred_flat)
 
             # Calculate the accuracy for this batch of test sentences, and
             # accumulate it over all batches.
             total_eval_accuracy += Metrics.flat_accuracy(label_ids, logits)
 
+        # Report results
+        report = Metrics.report(self.metric_name, np.array(y_true).flatten(), np.array(y_pred).flatten())
+        print(report)
         # Report the final accuracy for this validation run.
-        avg_val_accuracy = total_eval_accuracy / len(validation_dataloader)
+        avg_val_accuracy = total_eval_accuracy / len(dataloader)
         print("  Accuracy: {0:.2f}".format(avg_val_accuracy))
 
         # Calculate the average loss over all of the batches.
-        avg_val_loss = total_eval_loss / len(validation_dataloader)
+        avg_val_loss = total_eval_loss / len(dataloader)
         
         # Measure how long the validation run took.
         validation_time = format_time(time.time() - t0)
         
         print("  Validation Loss: {0:.2f}".format(avg_val_loss))
         print("  Validation took: {:}".format(validation_time))
-        return avg_val_accuracy, avg_val_loss, validation_time
+        return avg_val_accuracy, avg_val_loss, validation_time, report
             
