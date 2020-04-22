@@ -98,10 +98,11 @@ def set_seed(value=1111):
 ########### Specific functions ##########
 #########################################
 
-def save(model, tokenizer, output_dir):
+def save(model, tokenizer, output_dir, index):
     """ Saving best-practices: if you use defaults names for the model, 
     you can reload it using from_pretrained().
     """
+    output_dir = os.path.join(output_dir, index)
     # If we save using the predefined names, we can load using `from_pretrained`
     output_model_file = os.path.join(output_dir, WEIGHTS_NAME)
     output_config_file = os.path.join(output_dir, CONFIG_NAME)
