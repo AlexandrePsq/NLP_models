@@ -15,6 +15,7 @@ output_dir: ./sentence_classification_COLA_bert_base_cased
 log_file: logs.txt
 local_rank: -1
 do_test: True
+metric_name: classification
 
 # Datasets
 dataset_name: COLA
