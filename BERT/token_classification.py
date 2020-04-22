@@ -135,21 +135,28 @@ class TokenClassificationProcessor(DataProcessor):
                                 return_tensors = 'pt'           # Return pytorch tensors.
                         )            
             label_ids= []
+            output_mask = []
             assert len(example.text_a.split(' '))==len(labellist)
             for i, word in enumerate(example.text_a.split(' ')):
                 # duplicate labels for word pieces
-                for _ in tokenizer.tokenize(word):
+                for j, _ in enumerate(tokenizer.tokenize(word)):
                     label_ids.append(label_map[labellist[i]])
+                    output_mask.append(int((j == 0))) # 1 for first word piece of each word
             label_ids.insert(0, label_map['[CLS]'])
+            output_mask.insert(0,1)
             label_ids = label_ids[0:(max_seq_length - 1)]
+            output_mask = output_mask[0:(max_seq_length - 1)]
             label_ids.append(label_map['[SEP]'])
+            output_mask.append(1)
             while len(label_ids)<encoded_dict['input_ids'].shape[-1]:
                 label_ids.append(0)
+                output_mask.append(0)
         
             features.append(InputFeatures(input_ids=encoded_dict['input_ids'],
                                     attention_mask=encoded_dict['attention_mask'],
                                     token_type_ids=encoded_dict['token_type_ids'],
-                                    label_ids=torch.tensor(label_ids).unsqueeze(0)
+                                    label_ids=torch.tensor(label_ids).unsqueeze(0),
+                                    output_mask=torch.tensor(output_mask).unsqueeze(0)
                                     )
                             )
         return features
@@ -160,7 +167,8 @@ class TokenClassificationProcessor(DataProcessor):
         attention_mask = torch.cat([f.attention_mask for f in features], dim=0)
         token_type_ids =  torch.cat([f.token_type_ids for f in features], dim=0)
         label_ids =  torch.cat([f.label_ids for f in features], dim=0)
-        data = TensorDataset(input_ids, attention_mask, token_type_ids, label_ids)
+        output_mask =  torch.cat([f.output_mask for f in features], dim=0)
+        data = TensorDataset(input_ids, attention_mask, token_type_ids, label_ids, output_mask)
         if set_type=='train':
             if local_rank == -1:
                 sampler = RandomSampler(data)
