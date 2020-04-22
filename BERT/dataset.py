@@ -62,8 +62,9 @@ class InputExample(object):
 class InputFeatures(object):
     """A single set of features of data."""
 
-    def __init__(self, input_ids, attention_mask, token_type_ids, label_ids):
+    def __init__(self, input_ids, attention_mask, token_type_ids, label_ids, output_mask=None):
         self.input_ids = input_ids
         self.attention_mask = attention_mask
         self.token_type_ids = token_type_ids
         self.label_ids = label_ids
+        self.output_mask = output_mask
