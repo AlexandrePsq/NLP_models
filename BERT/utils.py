@@ -45,6 +45,15 @@ def read_yaml(yaml_path):
             quit()
     return parameters
 
+def save_yaml(data, yaml_path):
+    """Open and write safely in a yaml file.
+    Arguments:
+        - data: list/dict/str/int/float
+        -yaml_path: str
+    """
+    with open(yaml_path, 'w') as outfile:
+        yaml.dump(data, outfile, default_flow_style=False)
+
 def filter_args(func, d):
     """ Filter dictionary keys to match the function arguments.
     Arguments:

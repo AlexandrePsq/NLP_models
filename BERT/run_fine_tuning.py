@@ -24,7 +24,7 @@ from transformers import BertForNextSentencePrediction, BertForSequenceClassific
 from transformers import BertTokenizer, BertModel, BertForPreTraining, BertForMaskedLM, WEIGHTS_NAME, CONFIG_NAME
 
 from sentence_classification import SentenceClassificationDataset, SentenceClassificationProcessor
-from utils import read_yaml, set_seed, format_time, filter_args, get_device, save, check_folder
+from utils import read_yaml, set_seed, format_time, filter_args, get_device, save, check_folder, save_yaml
 from token_classification import TokenClassificationDataset, TokenClassificationProcessor
 from processors import DataProcessor, ModelProcessor
 from reporting import Report
@@ -46,6 +46,7 @@ if __name__=='__main__':
     # Fetch parameters
     parameters = read_yaml(args.yaml_file)
     check_folder(parameters['output_dir'])
+    save_yaml(parameters, os.path.join(parameters['output_dir'], 'config.yml'))
     logging.basicConfig(filename=os.path.join(parameters['output_dir'], parameters['log_file']), filemode='w+', level=logging.INFO)
     logging.info("Parameters fetched.")
 
