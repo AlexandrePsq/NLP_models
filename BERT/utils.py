@@ -57,16 +57,23 @@ def filter_args(func, d):
     args = {key: d[key] for key in keys if ((key!='self') and (key in d.keys()))}
     return args
 
-def get_device(device_number=0):
+def get_device(device_number=0, local_rank=-1):
     """ Get the device to use for computations.
     """
-    if torch.cuda.is_available():       
-        device = torch.device("cuda")
+    if local_rank == -1:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        n_gpu = torch.cuda.device_count()
         print('There are %d GPU(s) available.' % torch.cuda.device_count())
-        print('We will use the GPU:', torch.cuda.get_device_name(device_number))
+        if torch.cuda.is_available():
+            print('We will use the GPU:', torch.cuda.get_device_name(device_number))
+        else:
+            print('No GPU available, using the CPU instead.')
     else:
-        print('No GPU available, using the CPU instead.')
-        device = torch.device("cpu")
+        torch.cuda.set_device(local_rank)
+        device = torch.device("cuda", local_rank)
+        n_gpu = 1
+        # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
+        torch.distributed.init_process_group(backend='nccl')
     return device
 
 def format_time(elapsed):
@@ -90,47 +97,6 @@ def set_seed(value=1111):
 #########################################
 ########### Specific functions ##########
 #########################################
-
-def fetch_dataset_from_url(url, local_path):
-    """ Download dataset from URL.
-    COLA: 'https://nyu-mll.github.io/CoLA/cola_public_1.1.zip'
-    """
-    print('Downloading dataset...')
-    if not os.path.exists(local_path):
-        try:
-            wget.download(url, local_path)
-        except Exception:
-            raise Exception("Invalid URL: {}".format(url))
-    # Unzip the dataset (if we haven't already)
-    os.system("unzip {} -d ./datasets".format(local_path))
-    os.system("rm {}".format(local_path))
-    # return path to the new dataset
-    list_of_files = glob.glob('./datasets/*')
-    latest_folder = max(list_of_files, key=os.path.getctime)
-    return latest_folder
-
-def fetch_data(path, local_path=None, **kwargs):
-    """ Fetch data.   :)
-    """
-    train, test = None, None
-    if os.path.exists(path):
-        try:
-            train_file = sorted(glob.glob(os.path.join(path, '*train*')))[0]
-            train = pd.read_csv(train_file, engine='python', **kwargs)
-        except:
-            raise FileExistsError("Verify that your train file is in {}. Name should included 'train'.\nOr modify your yaml file.".format(path))
-        try:
-            test_file = sorted(glob.glob(os.path.join(path, '*test*')))[0]
-            test = pd.read_csv(test_file, engine='python', **kwargs)
-        except:
-            print("Verify that your test file is in {}. Name should included 'test'.\nOr modify your yaml file.".format(path))
-    else:
-        local_path = local_path if local_path else "./data"
-        latest_folder = fetch_dataset_from_url(path, local_path)
-        print('Lastest downloaded dataset: {}\n'.format(latest_folder))
-        print(os.listdir(latest_folder))
-        train, test = fetch_data(latest_folder, **kwargs)
-    return train, test
 
 def save(model, tokenizer, output_dir):
     """ Saving best-practices: if you use defaults names for the model, 
