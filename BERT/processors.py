@@ -191,12 +191,16 @@ class ModelProcessor(object):
             # `batch` contains three pytorch tensors:
             #   [0]: input ids 
             #   [1]: attention masks
-            #   [2]: labels 
+            #   [2]: token_type_ids
+            #   [3]: labels 
+            #   [4]: output_mask (optional)
             input_ids = batch[0].to(self.device)
             attention_mask = batch[1].to(self.device)
             token_type_ids = batch[2].to(self.device)
             label_ids = batch[3].to(self.device)
-            output_mask = batch[4].to(self.device)
+            output_mask = None 
+            if len(batch) > 4:
+                output_mask = batch[4].to(self.device)
             
             with torch.no_grad():        
                 # The documentation for the BERT `models` are here: 
@@ -213,8 +217,11 @@ class ModelProcessor(object):
             # Move logits and labels to CPU
             logits = logits.detach().cpu().numpy()
             label_ids = label_ids.to('cpu').numpy()
-            output_mask = output_mask.to('cpu').numpy()
-            active_loss = (output_mask == 1)
+            if output_mask:
+                output_mask = output_mask.to('cpu').numpy()
+                active_loss = (output_mask == 1)
+            else:
+                active_loss = np.ones(label_ids.shape)
             pred_flat = np.argmax(logits, axis=-1)[active_loss].flatten()
             labels_flat = label_ids[active_loss].flatten()
             y_true.append(labels_flat)
@@ -225,7 +232,9 @@ class ModelProcessor(object):
             total_eval_accuracy += Metrics.flat_accuracy(label_ids, logits)
 
         # Report results
-        report = Metrics.report(self.metric_name, np.array(y_true).flatten(), np.array(y_pred).flatten())
+        report = Metrics.report(self.metric_name, 
+                                [item for sublist in y_true for item in sublist], 
+                                [item for sublist in y_pred for item in sublist])
         print(report)
         # Report the final accuracy for this validation run.
         avg_val_accuracy = total_eval_accuracy / len(dataloader)
