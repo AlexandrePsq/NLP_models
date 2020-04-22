@@ -27,7 +27,7 @@ class Report(object):
         plt.plot(df['Training Loss'], 'b-o', label="Training")
         plt.plot(df['Valid. Loss'], 'g-o', label="Validation")
         if test_loss:
-            plt.hlines(test_loss, 0, nb_epochs, 'r-o', label='Test')
+            plt.hlines(test_loss, 0, nb_epochs, 'r', label='Test')
 
         # Label the plot.
         if test_loss:
