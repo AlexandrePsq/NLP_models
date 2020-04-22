@@ -5,6 +5,7 @@ from utils import format_time
 
 from dataset import Dataset, InputExample, InputFeatures
 from metrics import Metrics
+from utils import save
 
 
 
@@ -43,11 +44,13 @@ class DataProcessor(object):
 class ModelProcessor(object):
     """Base class for model training/validation and evaluation."""
 
-    def __init__(self, model, optimizer, scheduler, device, nb_epochs=3):
+    def __init__(self, model, optimizer, tokenizer, scheduler, device, nb_epochs=3, nb_checkpoints=24):
         self.model = model
         self.optimizer = optimizer
+        self.tokenizer = tokenizer
         self.scheduler = scheduler
         self.device = device
+        self.nb_checkpoints = nb_checkpoints
         self.nb_epochs = nb_epochs
 
 
@@ -99,7 +102,7 @@ class ModelProcessor(object):
         self.scheduler.step()
         return total_train_loss
 
-    def train(self, train_dataloader, validation_dataloader):
+    def train(self, train_dataloader, validation_dataloader, output_dir):
         """ Train a model with evaluation at each step, given an optimizer, scheduler, device and train and 
         validation data loaders.
         Returns loss statistics from training and evaluations.
@@ -108,6 +111,7 @@ class ModelProcessor(object):
 
         # Measure the total training time for the whole run.
         total_t0 = time.time()
+        save_step = self.nb_epochs * len(train_dataloader) // self.nb_checkpoints
 
         # For each epoch...
         for epoch_i in range(0, self.nb_epochs):
@@ -116,6 +120,8 @@ class ModelProcessor(object):
 
             # Measure how long the training epoch takes.
             t0 = time.time()
+            # index of the checkpoints
+            checkpoints_index = 1 + epoch_i * (len(train_dataloader) // save_step)
             # Reset the total loss for this epoch.
             total_train_loss = 0
             # Put the model into training mode. Don't be mislead--the call to 
@@ -126,6 +132,10 @@ class ModelProcessor(object):
 
             # For each batch of training data...
             for step, batch in enumerate(train_dataloader):
+                # Save model weights to have a given number of checkpoints at the end
+                if step != 0 and step % save_step == 0:
+                    save(self.model, self.tokenizer, output_dir, 'checkpoint_' + str(checkpoints_index))
+                    checkpoints_index += 1
                 # Progress update every 40 batches.
                 if step % 50 == 0 and not step == 0:
                     # Calculate elapsed time in minutes.
