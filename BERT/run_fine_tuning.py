@@ -23,10 +23,10 @@ from transformers import BertForQuestionAnswering, AdamW, BertConfig, get_linear
 from transformers import BertForNextSentencePrediction, BertForSequenceClassification, BertForTokenClassification
 from transformers import BertTokenizer, BertModel, BertForPreTraining, BertForMaskedLM, WEIGHTS_NAME, CONFIG_NAME
 
-from utils import read_yaml, set_seed, format_time, filter_args, get_device, fetch_dataset_from_url, fetch_data, save, check_folder
-from processors import DataProcessor, ModelProcessor
-from token_classification import TokenClassificationDataset, TokenClassificationProcessor
 from sentence_classification import SentenceClassificationDataset, SentenceClassificationProcessor
+from utils import read_yaml, set_seed, format_time, filter_args, get_device, save, check_folder
+from token_classification import TokenClassificationDataset, TokenClassificationProcessor
+from processors import DataProcessor, ModelProcessor
 from reporting import Report
 from dataset import Dataset
 
@@ -143,15 +143,15 @@ if __name__=='__main__':
     logging.info("\tDone.")
 
     logging.info("Fine-tuning the model.")
-    model_processor = ModelProcessor(model, optimizer, scheduler, device, parameters['nb_epochs'])
-    training_stats = model_processor.train(train_dataloader, dev_dataloader)
+    model_processor = ModelProcessor(model, optimizer, tokenizer, scheduler, device, parameters['nb_epochs'])
+    training_stats = model_processor.train(train_dataloader, dev_dataloader, parameters['output_dir'])
     test_accuracy, test_loss = None, None
     if parameters['do_test']:
         test_accuracy, test_loss, test_time = model_processor.evaluate(test_dataloader) 
     logging.info("\tDone.")
 
     logging.info("Saving fine-tuned model...")
-    save(model, tokenizer, os.path.join(parameters['output_dir'], 'checkpoints'))
+    save(model, tokenizer, parameters['output_dir'], 'fine_tuned')
     logging.info("\tDone.")
 
     logging.info("Plotting training and validation losses...")
