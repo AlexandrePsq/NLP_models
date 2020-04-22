@@ -143,11 +143,16 @@ if __name__=='__main__':
     logging.info("\tDone.")
 
     logging.info("Fine-tuning the model.")
-    model_processor = ModelProcessor(model, optimizer, tokenizer, scheduler, device, parameters['nb_epochs'])
+    model_processor = ModelProcessor(model, optimizer, tokenizer, scheduler, device, parameters['metric_name'], parameters['nb_epochs'])
     training_stats = model_processor.train(train_dataloader, dev_dataloader, parameters['output_dir'])
+    logging.info("Reports durinf validations: ")
+    for stat in training_stats:
+        logging.info(stat['report'])
     test_accuracy, test_loss = None, None
     if parameters['do_test']:
-        test_accuracy, test_loss, test_time = model_processor.evaluate(test_dataloader) 
+        logging.info("Evaluation report: ")
+        test_accuracy, test_loss, test_time, report = model_processor.evaluate(test_dataloader) 
+        logging.info(report)
     logging.info("\tDone.")
 
     logging.info("Saving fine-tuned model...")
