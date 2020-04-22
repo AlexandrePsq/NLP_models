@@ -13,10 +13,12 @@ task: sentence-classification # Task on which to fine-tune the model ['POS-taggi
 seed: 1111 # Seed for reproductibility
 output_dir: ./sentence_classification_COLA_bert_base_cased
 log_file: logs.txt
+local_rank: -1
+do_test: True
 
 # Datasets
-corpus_name: COLA
-dataset: "./datasets/cola_public/raw" # Path/URL to the folder containing the dataset to use for fine-tuning
+dataset_name: COLA
+dataset_dir: "./datasets/cola_public/raw" # Path/URL to the folder containing the dataset to use for fine-tuning
 delimiter: '\t'
 header: 
 names: ['sentence_source', 'label', 'label_notes', 'sentence']
