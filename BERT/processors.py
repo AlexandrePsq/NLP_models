@@ -213,9 +213,10 @@ class ModelProcessor(object):
             # Move logits and labels to CPU
             logits = logits.detach().cpu().numpy()
             label_ids = label_ids.to('cpu').numpy()
-            output_mask = label_ids.to('cpu').numpy()
-            pred_flat = np.argmax(logits, axis=-1)[output_mask].flatten()
-            labels_flat = label_ids[output_mask].flatten()
+            output_mask = output_mask.to('cpu').numpy()
+            active_loss = (output_mask == 1)
+            pred_flat = np.argmax(logits, axis=-1)[active_loss].flatten()
+            labels_flat = label_ids[active_loss].flatten()
             y_true.append(labels_flat)
             y_pred.append(pred_flat)
 
