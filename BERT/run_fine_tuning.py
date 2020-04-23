@@ -75,7 +75,9 @@ if __name__=='__main__':
     if parameters['do_test']:
         data.process_dataset('test')
     label_list = processor.get_labels(data)
-    num_labels = len(label_list) + 1 # we add 1 because of the padding which is labelled 0
+    num_labels = len(label_list)
+    if task in ['pos-tagging', 'ner']:
+        num_labels += 1 # we add 1 because of the padding which is labelled 0
     logging.info("\tDone.")
 
     logging.info("Fetching pre-trained Bert model: {} and Tokenizer: {} for the task: {}...".format(parameters['pretrained_model'],

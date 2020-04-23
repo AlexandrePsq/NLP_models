@@ -20,7 +20,7 @@ metric_name: classification
 # Datasets
 dataset_name: conll2003
 dataset_dir: "./datasets/conll2003" # Path/URL to the folder containing the dataset to use for fine-tuning
-use_output_mask: True
+use_output_mask: True # for token classification
 
 # Data Loader
 train_size_percentage: 0.9
@@ -29,7 +29,6 @@ batch_size: 32
 # Model & Tokenizer
 pretrained_model: bert-base-cased # Name of (or path to) the pre-trained BERT model to use
 pretrained_tokenizer: bert-base-cased # Name of (or path to) the pre-trained BERT tokenizer to use
-num_labels: 2
 output_attentions: True
 output_hidden_states: True
 max_length: 128
