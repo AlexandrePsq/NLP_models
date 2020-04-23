@@ -20,6 +20,7 @@ metric_name: classification
 # Datasets
 dataset_name: conll2003
 dataset_dir: "./datasets/conll2003" # Path/URL to the folder containing the dataset to use for fine-tuning
+use_output_mask: True
 
 # Data Loader
 train_size_percentage: 0.9

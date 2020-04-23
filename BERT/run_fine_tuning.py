@@ -144,7 +144,11 @@ if __name__=='__main__':
     logging.info("\tDone.")
 
     logging.info("Fine-tuning the model.")
-    model_processor = ModelProcessor(model, optimizer, tokenizer, scheduler, device, parameters['metric_name'], parameters['nb_epochs'])
+    model_processor = ModelProcessor(model, optimizer, tokenizer, 
+                                        scheduler, device, 
+                                        parameters['metric_name'], 
+                                        parameters['nb_epochs'],
+                                        parameters['use_output_mask'])
     training_stats = model_processor.train(train_dataloader, dev_dataloader, parameters['output_dir'])
     logging.info("Reports durinf validations: ")
     for stat in training_stats:

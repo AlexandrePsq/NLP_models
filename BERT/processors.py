@@ -45,7 +45,16 @@ class DataProcessor(object):
 class ModelProcessor(object):
     """Base class for model training/validation and evaluation."""
 
-    def __init__(self, model, optimizer=None, tokenizer=None, scheduler=None, device=None, metric_name=None, nb_epochs=3, nb_checkpoints=24):
+    def __init__(self, 
+                    model, 
+                    optimizer=None, 
+                    tokenizer=None, 
+                    scheduler=None, 
+                    device=None, 
+                    metric_name=None, 
+                    nb_epochs=3, 
+                    use_output_mask=False, 
+                    nb_checkpoints=24):
         self.model = model
         self.optimizer = optimizer
         self.tokenizer = tokenizer
@@ -54,6 +63,7 @@ class ModelProcessor(object):
         self.nb_checkpoints = nb_checkpoints
         self.nb_epochs = nb_epochs
         self.metric_name = metric_name
+        self.use_output_mask = use_output_mask
 
 
     #########################################
@@ -199,7 +209,7 @@ class ModelProcessor(object):
             token_type_ids = batch[2].to(self.device)
             label_ids = batch[3].to(self.device)
             output_mask = None 
-            if len(batch) > 4:
+            if self.use_output_mask:
                 output_mask = batch[4].to(self.device)
             
             with torch.no_grad():        
@@ -217,7 +227,7 @@ class ModelProcessor(object):
             # Move logits and labels to CPU
             logits = logits.detach().cpu().numpy()
             label_ids = label_ids.to('cpu').numpy()
-            if output_mask:
+            if self.use_output_mask:
                 output_mask = output_mask.to('cpu').numpy()
                 active_loss = (output_mask == 1)
             else:
