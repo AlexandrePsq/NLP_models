@@ -82,7 +82,9 @@ class SentenceClassificationDataset(Dataset):
         _file = set_type + '.tsv'
         path_to_data = os.path.join(self.dataset_dir, _file)
         df = pd.read_csv(path_to_data, 
-                            delimiter='\t')
+                            delimiter='\t', 
+                            header=None, 
+                            names=['sentence', 'label'])
         sentences = df.sentence.values
         labels = df.label.values
         data = zip(sentences, labels)
