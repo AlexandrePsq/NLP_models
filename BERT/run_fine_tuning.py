@@ -1,5 +1,5 @@
-""" This training code is based on the `run_glue.py` script here:
-https://github.com/huggingface/transformers/blob/5bfcd0485ece086ebcbed2d008813037968a9e58/examples/run_glue.py#L128
+""" Code to fine-tune hugging-face implementation of BERT model.
+https://huggingface.co/
 """
 
 
