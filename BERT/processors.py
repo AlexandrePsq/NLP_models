@@ -232,6 +232,7 @@ class ModelProcessor(object):
                 active_loss = (output_mask == 1)
             else:
                 active_loss = np.ones(label_ids.shape)
+                active_loss = (active_loss == 1)
             pred_flat = np.argmax(logits, axis=-1)[active_loss].flatten()
             labels_flat = label_ids[active_loss].flatten()
             y_true.append(labels_flat)
