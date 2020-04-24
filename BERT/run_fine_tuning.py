@@ -152,7 +152,7 @@ if __name__=='__main__':
                                         parameters['nb_epochs'],
                                         parameters['use_output_mask'])
     training_stats = model_processor.train(train_dataloader, dev_dataloader, parameters['output_dir'])
-    logging.info("Reports durinf validations: ")
+    logging.info("Validation reports: ")
     for stat in training_stats:
         logging.info(stat['report'])
     test_accuracy, test_loss = None, None
@@ -162,7 +162,7 @@ if __name__=='__main__':
         logging.info(report)
     logging.info("\tDone.")
 
-    logging.info("Saving fine-tuned model...")
+    logging.info("Saving fine-tuned model to {}...".format(os.path.join(parameters['output_dir'], 'fine_tuned')))
     save(model, tokenizer, parameters['output_dir'], 'fine_tuned')
     logging.info("\tDone.")
 
