@@ -12,31 +12,29 @@ import os
 import torch
 import numpy as np
 import pandas as pd
-from tokenizer import tokenize 
 from transformers import AutoTokenizer
 
 import utils
 from modeling_hacked_bert import BertModel
 
 
-class BERTExtractor(object):
+class BertExtractor(object):
     """Container module for BERT."""
 
-    def __init__(self, pretrained_bert_model, language, name, prediction_type, output_hidden_states, output_attentions, config_path, loi=None):
-        super(BERTExtractor, self).__init__()
+    def __init__(self, pretrained_bert_model, language, name, prediction_type, output_hidden_states, output_attentions, config_path=None):
+        super(BertExtractor, self).__init__()
         # Load pre-trained model tokenizer (vocabulary)
         # Crucially, do not do basic tokenization; PTB is tokenized. Just do wordpiece tokenization.
         self.model = BertModel.from_pretrained(pretrained_bert_model, output_hidden_states=output_hidden_states, output_attentions=output_attentions)
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_bert_model)
         
         self.language = language
-        self.NUM_HIDDEN_LAYERS = self.model.config['num_hidden_layers']
-        self.FEATURE_COUNT = self.model.config['hidden_size']
-        self.NUM_ATTENTION_HEADS = self.model.config['num_attention_heads']
+        self.NUM_HIDDEN_LAYERS = self.model.config.num_hidden_layers
+        self.FEATURE_COUNT = self.model.config.hidden_size
+        self.NUM_ATTENTION_HEADS = self.model.config.num_attention_heads
         self.name = name
-        self.config = utils.read_yaml(config_path)
-        self.prediction_type = prediction_type
-        self.loi = np.array(loi) if loi else np.arange(1 + self.NUM_HIDDEN_LAYERS) # loi: layers of interest
+        self.config = utils.read_yaml(config_path) if config_path else {'max_length': 128}
+        self.prediction_type = prediction_type # ['sentence', 'sequential']
 
     def __name__(self):
         """ Retrieve Bert instance name."""
@@ -58,20 +56,18 @@ class BERTExtractor(object):
         Returns:
             - result: pd.DataFrame containing activation (+ optionally entropy
             and surprisal)
-        # iterator = tokenize(path, language, path_like=True, train=False)
         """
         self.model.eval()
         if self.prediction_type == 'sentence':
-            hidden_states_activations, attentions_activations, attention_heads_activations = self.get_classic_activations(iterator, language)
+            hidden_states_activations, attention_heads_activations = self.get_classic_activations(iterator, language)
         elif self.prediction_type == 'sequential':
-            hidden_states_activations, attentions_activations, attention_heads_activations = self.get_sequential_activations(iterator, language)
-        return hidden_states_activations, attentions_activations, attention_heads_activations 
+            hidden_states_activations, attention_heads_activations = self.get_sequential_activations(iterator, language)
+        return hidden_states_activations, attention_heads_activations 
 
     def get_classic_activations(self, iterator, language):
         """ Model predictions are generated in the classical way: the model
         take the whole sentence as input.
         """
-        attentions_activations = []
         hidden_states_activations = []
         attention_heads_activations = []
         # Here, we give as input the text line by line.
@@ -105,22 +101,17 @@ class BERTExtractor(object):
                 # filtration
                 if self.model.config.output_hidden_states:
                     hidden_states_activations_ = np.vstack(encoded_layers[2]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
-                    hidden_states_activations_ = hidden_states_activations_[self.loi, :, :]
                     hidden_states_activations += utils.extract_activations_from_token_activations(hidden_states_activations_, mapping)
                 if self.model.config.output_attentions:
-                    attentions_activations_ = np.vstack([array[0] for array in encoded_layers[3]])
-                    attentions_activations_ = attentions_activations_[self.loi, :, :]
                     attention_heads_activations_ = np.vstack([array[0].view([
                                                                 1, 
                                                                 self.config['max_length'], 
                                                                 self.NUM_ATTENTION_HEADS, 
                                                                 self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS]).permute(0, 2, 1, 3).contiguous()  for array in encoded_layers[3]])
-                    attentions_activations += utils.extract_activations_from_token_activations(attentions_activations_, mapping)
                     attention_heads_activations += utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping)
-        hidden_states_activations = pd.DataFrame(np.vstack(hidden_states_activations), columns=['hidden_state-layer-{}-{}'.format(layer, index) for layer in self.loi for index in range(self.FEATURE_COUNT)])
-        attentions_activations = pd.DataFrame(np.vstack(hidden_states_activations), columns=['attention-layer-{}-{}'.format(layer, index) for layer in self.loi for index in range(self.FEATURE_COUNT)])
-        attention_heads_activations = pd.DataFrame(np.vstack(attentions_activations), columns=['attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in self.loi for head in range(self.NUM_ATTENTION_HEADS) for index in range(self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
-        return hidden_states_activations, attentions_activations, attention_heads_activations
+        hidden_states_activations = pd.DataFrame(np.vstack(hidden_states_activations), columns=['hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(self.FEATURE_COUNT)])
+        attention_heads_activations = pd.DataFrame(np.vstack(attention_heads_activations), columns=['attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in np.arange(1, 1 + self.NUM_HIDDEN_LAYERS) for head in range(self.NUM_ATTENTION_HEADS) for index in range(self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
+        return hidden_states_activations, attention_heads_activations
     
     def get_sequential_activations(self, iterator, language):
         """ Model predictions are generated sequentially: the model take as
@@ -129,7 +120,6 @@ class BERTExtractor(object):
         This framework enable to retrieve representations that are not aware of future
         tokens.
         """
-        attentions_activations = []
         hidden_states_activations = []
         attention_heads_activations = []
         # Here we give as input the sentence up to the actual word, incrementing by one at each step.
@@ -159,19 +149,14 @@ class BERTExtractor(object):
                     # filtration
                     if self.model.config.output_hidden_states:
                         hidden_states_activations_ = np.vstack(encoded_layers[2]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
-                        hidden_states_activations_ = hidden_states_activations_[self.loi, :, :]
                         hidden_states_activations.append(utils.extract_activations_from_token_activations(hidden_states_activations_, mapping)[-1])
                     if self.model.config.output_attentions:
-                        attentions_activations_ = np.vstack([array[0] for array in encoded_layers[3]])
-                        attentions_activations_ = attentions_activations_[self.loi, :, :]
                         attention_heads_activations_ = np.vstack([array[0].view([
                                                                 1, 
                                                                 self.config['max_length'], 
                                                                 self.NUM_ATTENTION_HEADS, 
                                                                 self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS]).permute(0, 2, 1, 3).contiguous()  for array in encoded_layers[3]])
-                        attentions_activations.append(utils.extract_activations_from_token_activations(attentions_activations_, mapping)[-1])
                         attention_heads_activations.append(utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping)[-1])
-        hidden_states_activations = pd.DataFrame(np.vstack(hidden_states_activations), columns=['hidden_state-layer-{}-{}'.format(layer, index) for layer in self.loi for index in range(self.FEATURE_COUNT)])
-        attentions_activations = pd.DataFrame(np.vstack(hidden_states_activations), columns=['attention-layer-{}-{}'.format(layer, index) for layer in self.loi for index in range(self.FEATURE_COUNT)])
-        attention_heads_activations = pd.DataFrame(np.vstack(attentions_activations), columns=['attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in self.loi for head in range(self.NUM_ATTENTION_HEADS) for index in range(self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
-        return hidden_states_activations, attentions_activations, attention_heads_activations
+        hidden_states_activations = pd.DataFrame(np.vstack(hidden_states_activations), columns=['hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(self.FEATURE_COUNT)])
+        attention_heads_activations = pd.DataFrame(np.vstack(attention_heads_activations), columns=['attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in np.arange(1, 1 + self.NUM_HIDDEN_LAYERS) for head in range(self.NUM_ATTENTION_HEADS) for index in range(self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
+        return hidden_states_activations, attention_heads_activations
