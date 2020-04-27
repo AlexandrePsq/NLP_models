@@ -133,17 +133,17 @@ def save(model, tokenizer, output_dir, index):
 #########################################
 
 def match_tokenized_to_untokenized(tokenized_sent, untokenized_sent):
-    '''Aligns tokenized and untokenized sentence given subwords "##" prefixed
+    """Aligns tokenized and untokenized sentence given subwords "##" prefixed
     Assuming that each subword token that does not start a new word is prefixed
     by two hashes, "##", computes an alignment between the un-subword-tokenized
     and subword-tokenized sentences.
-    Args:
-        tokenized_sent: a list of strings describing a subword-tokenized sentence
-        untokenized_sent: a list of strings describing a sentence, no subword tok.
+    Arguments:
+        - tokenized_sent: a list of strings describing a subword-tokenized sentence
+        - untokenized_sent: a list of strings describing a sentence, no subword tok.
     Returns:
-        A dictionary of type {int: list(int)} mapping each untokenized sentence
+        - mapping: dictionary of type {int: list(int)} mapping each untokenized sentence
         index to a list of subword-tokenized sentence indices
-    '''
+    """
     mapping = defaultdict(list)
     untokenized_sent_index = 0
     tokenized_sent_index = 1
@@ -156,7 +156,7 @@ def match_tokenized_to_untokenized(tokenized_sent, untokenized_sent):
         tokenized_sent_index += 1
     return mapping
 
-def extract_hidden_state_activations_from_tokenized(activation, mapping):
+def extract_activations_from_token_activations(activation, mapping):
     """Take the average activations of the tokens related to a given word."""
     new_activations = []
     for word_index in range(1, len(mapping.keys())):
@@ -166,9 +166,12 @@ def extract_hidden_state_activations_from_tokenized(activation, mapping):
         new_activations.append(np.mean(word_activation, axis=0).reshape(1,-1))
     return new_activations
 
-def extract_attention_head_activations_from_tokenized(activation, mapping):
-    """"""
+def extract_heads_activations_from_token_activations(activation, mapping):
+    """Extract heads activations of each layer for each token.
+    Take the average activations of the tokens related to a given word.
+    activation.shape: [nb_layers, nb_heads, sequence_length, hidden_size/nb_heads]"""
     new_activations = []
+    #activation = np.swapaxes(activation.squeeze(), 0, 1) # dimension: (nb_tokens, nb_heads)
     for word_index in range(1, len(mapping.keys())):
         word_activation = []
         word_activation.append([activation[:, :, index, :] for index in mapping[word_index]])
