@@ -57,6 +57,7 @@ class BertExtractor(object):
             - result: pd.DataFrame containing activation (+ optionally entropy
             and surprisal)
         """
+        utils.set_seed()
         self.model.eval()
         if self.prediction_type == 'sentence':
             hidden_states_activations, attention_heads_activations = self.get_classic_activations(iterator, language)
