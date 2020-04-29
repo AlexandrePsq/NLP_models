@@ -11,7 +11,8 @@ special_words = {
         'grown-ups': 'grownups',
         'grown-up': 'grownup',
         'hasn\'t': 'hasnt',
-        'hasn‘t': 'hasnt'
+        'hasn‘t': 'hasnt',
+        'redfaced': 'red faced'
     },
     'french': {
 
