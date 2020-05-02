@@ -125,7 +125,7 @@ class BertExtractor(object):
         attention_heads_activations = []
         # Here we give as input the sentence up to the actual word, incrementing by one at each step.
         for line in iterator:
-            for index in range(1, len(line.split())):
+            for index in range(1, len(line.split()) + 1):
                 tmp_line = " ".join(line.split()[:index])
                 tmp_line = tmp_line.strip() # Remove trailing characters
                 encoded_dict = self.tokenizer.encode_plus(
