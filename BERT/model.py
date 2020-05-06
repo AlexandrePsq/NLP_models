@@ -60,10 +60,25 @@ class BertExtractor(object):
         utils.set_seed()
         self.model.eval()
         if self.prediction_type == 'sentence':
-            hidden_states_activations, attention_heads_activations = self.get_classic_activations(iterator, language)
+            activations = self.get_classic_activations(iterator, language)
+            hidden_states_activations = activations[0] 
+            attention_heads_activations = activations[1] 
+            cls_hidden_states_activations = activations[2]
+            sep_hidden_states_activations = activations[3] 
+            cls_attention_activations = activations[4]
+            sep_attention_activations = activations[5] 
         elif self.prediction_type == 'sequential':
-            hidden_states_activations, attention_heads_activations = self.get_sequential_activations(iterator, language)
-        return hidden_states_activations, attention_heads_activations 
+            activations = self.get_sequential_activations(iterator, language)
+            hidden_states_activations = activations[0] 
+            attention_heads_activations = activations[1] 
+            cls_hidden_states_activations = activations[2]
+            sep_hidden_states_activations = activations[3] 
+            cls_attention_activations = activations[4]
+            sep_attention_activations = activations[5] 
+        return [hidden_states_activations, 
+                attention_heads_activations, 
+                (cls_hidden_states_activations, cls_attention_activations),
+                (sep_hidden_states_activations, sep_attention_activations)]
 
     def get_classic_activations(self, iterator, language):
         """ Model predictions are generated in the classical way: the model
@@ -71,6 +86,10 @@ class BertExtractor(object):
         """
         hidden_states_activations = []
         attention_heads_activations = []
+        cls_hidden_states_activations = []
+        sep_hidden_states_activations = []
+        cls_attention_activations = []
+        sep_attention_activations = []
         # Here, we give as input the text line by line.
         for line in iterator:
             line = line.strip() # Remove trailing characters
@@ -103,6 +122,9 @@ class BertExtractor(object):
                 if self.model.config.output_hidden_states:
                     hidden_states_activations_ = np.vstack(encoded_layers[2]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
                     hidden_states_activations += utils.extract_activations_from_token_activations(hidden_states_activations_, mapping)
+                    cls_activations_, sep_activations_ = utils.extract_activations_from_special_tokens(hidden_states_activations_, mapping)
+                    cls_hidden_states_activations += cls_activations_
+                    sep_hidden_states_activations += sep_activations_
                 if self.model.config.output_attentions:
                     attention_heads_activations_ = np.vstack([array[0].view([
                                                                 1, 
@@ -110,9 +132,21 @@ class BertExtractor(object):
                                                                 self.NUM_ATTENTION_HEADS, 
                                                                 self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS]).permute(0, 2, 1, 3).contiguous()  for array in encoded_layers[3]])
                     attention_heads_activations += utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping)
+                    cls_attention_, sep_attention_ = utils.extract_heads_activations_from_special_tokens(attention_heads_activations_, mapping)
+                    cls_attention_activations += cls_attention_
+                    sep_attention_activations += sep_attention_
         hidden_states_activations = pd.DataFrame(np.vstack(hidden_states_activations), columns=['hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
         attention_heads_activations = pd.DataFrame(np.vstack(attention_heads_activations), columns=['attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in np.arange(1, 1 + self.NUM_HIDDEN_LAYERS) for head in range(1, 1 + self.NUM_ATTENTION_HEADS) for index in range(1, 1 + self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
-        return hidden_states_activations, attention_heads_activations
+        cls_hidden_states_activations = pd.DataFrame(np.vstack(cls_hidden_states_activations), columns=['CLS-hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
+        sep_hidden_states_activations = pd.DataFrame(np.vstack(sep_hidden_states_activations), columns=['SEP-hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
+        cls_attention_activations = pd.DataFrame(np.vstack(cls_attention_activations), columns=['CLS-attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in np.arange(1, 1 + self.NUM_HIDDEN_LAYERS) for head in range(1, 1 + self.NUM_ATTENTION_HEADS) for index in range(1, 1 + self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
+        sep_attention_activations = pd.DataFrame(np.vstack(sep_attention_activations), columns=['SEP-attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in np.arange(1, 1 + self.NUM_HIDDEN_LAYERS) for head in range(1, 1 + self.NUM_ATTENTION_HEADS) for index in range(1, 1 + self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
+        return [hidden_states_activations, 
+                attention_heads_activations, 
+                cls_hidden_states_activations,
+                sep_hidden_states_activations,
+                cls_attention_activations,
+                sep_attention_activations]
     
     def get_sequential_activations(self, iterator, language):
         """ Model predictions are generated sequentially: the model take as
@@ -123,6 +157,10 @@ class BertExtractor(object):
         """
         hidden_states_activations = []
         attention_heads_activations = []
+        cls_hidden_states_activations = []
+        sep_hidden_states_activations = []
+        cls_attention_activations = []
+        sep_attention_activations = []
         # Here we give as input the sentence up to the actual word, incrementing by one at each step.
         for line in iterator:
             for index in range(1, len(line.split()) + 1):
@@ -151,6 +189,9 @@ class BertExtractor(object):
                     if self.model.config.output_hidden_states:
                         hidden_states_activations_ = np.vstack(encoded_layers[2]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
                         hidden_states_activations.append(utils.extract_activations_from_token_activations(hidden_states_activations_, mapping)[-1])
+                        cls_activations_, sep_activations_ = utils.extract_activations_from_special_tokens(hidden_states_activations_, mapping)
+                        cls_hidden_states_activations += cls_activations_
+                        sep_hidden_states_activations += sep_activations_
                     if self.model.config.output_attentions:
                         attention_heads_activations_ = np.vstack([array[0].view([
                                                                 1, 
@@ -158,6 +199,18 @@ class BertExtractor(object):
                                                                 self.NUM_ATTENTION_HEADS, 
                                                                 self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS]).permute(0, 2, 1, 3).contiguous()  for array in encoded_layers[3]])
                         attention_heads_activations.append(utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping)[-1])
+                        cls_attention_, sep_attention_ = utils.extract_heads_activations_from_special_tokens(attention_heads_activations_, mapping)
+                        cls_attention_activations += cls_attention_
+                        sep_attention_activations += sep_attention_
         hidden_states_activations = pd.DataFrame(np.vstack(hidden_states_activations), columns=['hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
         attention_heads_activations = pd.DataFrame(np.vstack(attention_heads_activations), columns=['attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in np.arange(1, 1 + self.NUM_HIDDEN_LAYERS) for head in range(1, 1 + self.NUM_ATTENTION_HEADS) for index in range(1, 1 + self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
-        return hidden_states_activations, attention_heads_activations
+        cls_hidden_states_activations = pd.DataFrame(np.vstack(cls_hidden_states_activations), columns=['CLS-hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
+        sep_hidden_states_activations = pd.DataFrame(np.vstack(sep_hidden_states_activations), columns=['SEP-hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
+        cls_attention_activations = pd.DataFrame(np.vstack(cls_attention_activations), columns=['CLS-attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in np.arange(1, 1 + self.NUM_HIDDEN_LAYERS) for head in range(1, 1 + self.NUM_ATTENTION_HEADS) for index in range(1, 1 + self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
+        sep_attention_activations = pd.DataFrame(np.vstack(sep_attention_activations), columns=['SEP-attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in np.arange(1, 1 + self.NUM_HIDDEN_LAYERS) for head in range(1, 1 + self.NUM_ATTENTION_HEADS) for index in range(1, 1 + self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
+        return [hidden_states_activations, 
+                attention_heads_activations, 
+                cls_hidden_states_activations,
+                sep_hidden_states_activations,
+                cls_attention_activations,
+                sep_attention_activations]
