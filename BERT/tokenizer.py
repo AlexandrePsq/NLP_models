@@ -74,6 +74,7 @@ def preprocess(text, special_words, language):
     text = text.replace('<3 points>', ' ...\n')
     for item in eos_punctuation + ['...']:
         text = text.replace(item + '\n' + ' ' + '”', item + ' ' + '”' + '\n')
+        text = text.replace(item + '\n' + ' ' + '’', item + ' ' + '’' + '\n')
     text = re.sub(' +', ' ', text)
     
     ### tokenize without punctuation ###
