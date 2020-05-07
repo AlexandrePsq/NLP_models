@@ -148,7 +148,7 @@ def match_tokenized_to_untokenized(tokenized_sent, untokenized_sent, connection_
     untokenized_sent_index = 0
     tokenized_sent_index = 0
     while (untokenized_sent_index < len(untokenized_sent) and tokenized_sent_index < len(tokenized_sent)):
-        while (tokenized_sent_index+1  < len(tokenized_sent) and (not tokenized_sent[tokenized_sent_index+1].startswith(connection_character))):
+        while (tokenized_sent_index+1  < len(tokenized_sent) and (not tokenized_sent[tokenized_sent_index+1].startswith(connection_character)) and tokenized_sent[tokenized_sent_index+1]!='</s>'):
             mapping[untokenized_sent_index].append(tokenized_sent_index)
             tokenized_sent_index += 1
         mapping[untokenized_sent_index].append(tokenized_sent_index)
