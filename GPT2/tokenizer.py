@@ -11,7 +11,8 @@ special_words = {
         'grown-ups': 'grownups',
         'grown-up': 'grownup',
         'hasn\'t': 'hasnt',
-        'hasn‘t': 'hasnt'
+        'hasn‘t': 'hasnt',
+        'redfaced': 'red faced'
     },
     'french': {
 
@@ -19,10 +20,17 @@ special_words = {
 }
 
 
-def tokenize(path, language, path_like=True, train=False):
+def tokenize(path, language, train=False):
+    """ Tokenize a text into sentences.
+    Optionnaly preprocess it.
+    Arguments:
+        - path: (str) path or text
+        - language: (str)  
+    Returns:
+        - iterator: sentence iterator
+    """
     print('Tokenizing...')
-    if path_like:
-        assert os.path.exists(path)
+    if os.path.exists(path):
         path = open(path, 'r', encoding='utf8').read()
 
     if not train:
@@ -38,6 +46,16 @@ def tokenize(path, language, path_like=True, train=False):
 
 
 def preprocess(text, special_words, language):
+    """ Prepare text for tokenization into sentences.
+    Replace words in text by the ones by which they have been replaced in the 
+    textgrid files. Then replace all numbers by their written english version.
+    We then add a space on each side of every punctuation symbol, paying attention 
+    to '...'.
+    Arguments:
+        - text: (str) text to preprocess
+        - special_words: (dict) special words and words by which to replace them
+        - language: (str)
+    """
     text = text.replace('\n', '')
     text = text.replace('<unk>', 'unk')
     for word in special_words[language].keys():
@@ -54,6 +72,9 @@ def preprocess(text, special_words, language):
     for item in eos_punctuation:
         text = text.replace(item, ' '+ item + '\n')
     text = text.replace('<3 points>', ' ...\n')
+    for item in eos_punctuation + ['...']:
+        text = text.replace(item + '\n' + ' ' + '”', item + ' ' + '”' + '\n')
+        text = text.replace(item + '\n' + ' ' + '’', item + ' ' + '’' + '\n')
     text = re.sub(' +', ' ', text)
     
     ### tokenize without punctuation ###

@@ -158,11 +158,10 @@ class Attention(nn.Module):
         # Mask heads if we want to
         if head_mask is not None:
             w = w * head_mask
-
         outputs = [torch.matmul(w, v)]
         if self.output_attentions:
             outputs.append(w)
-        return outputs
+        return outputs # context_layer, attention_weights
 
     def merge_heads(self, x):
         x = x.permute(0, 2, 1, 3).contiguous()
@@ -200,7 +199,9 @@ class Attention(nn.Module):
         a = self.c_proj(a)
         a = self.resid_dropout(a)
 
-        outputs = [a, present] + attn_outputs[1:]
+        #outputs = [a, present] + attn_outputs[1:]
+        outputs = [a, present] + attn_outputs # original line above
+        # attn_outputs: [context_layer, attention_weights]
         return outputs  # a, present, (attentions)
 
 
@@ -242,8 +243,9 @@ class Block(nn.Module):
         m = self.mlp(self.ln_2(x))
         x = x + m
 
-        outputs = [x] + output_attn[1:]
-        return outputs  # x, present, (attentions)
+        outputs = [x] + output_attn[1:] # we add to the output of Block the "context_layer", 
+        # which is the matmul between the attention heads and "value_layer" 
+        return outputs  # x, present, attentions, context_layer
 
 
 class GPT2PreTrainedModel(PreTrainedModel):
@@ -517,7 +519,8 @@ class GPT2Model(GPT2PreTrainedModel):
                 presents = presents + (present,)
 
             if self.output_attentions:
-                all_attentions.append(outputs[2])
+                #all_attentions.append(outputs[2])
+                all_attentions.append(outputs[2:]) # original line above
 
         hidden_states = self.ln_f(hidden_states)
 
@@ -525,6 +528,9 @@ class GPT2Model(GPT2PreTrainedModel):
         # Add last hidden state
         if self.output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
+            # the last hidden state will go throught a supplementary layer norm (self.ln_f)
+            # in comparison to former hidden states. However we just consider it as part of the last layer
+            # in the analysis that will be done.
 
         outputs = (hidden_states,)
         if use_cache is True:
@@ -533,8 +539,12 @@ class GPT2Model(GPT2PreTrainedModel):
             outputs = outputs + (all_hidden_states,)
         if self.output_attentions:
             # let the number of heads free (-1) so we can extract attention even after head pruning
-            attention_output_shape = input_shape[:-1] + (-1,) + all_attentions[0].shape[-2:]
-            all_attentions = tuple(t.view(*attention_output_shape) for t in all_attentions)
+            #attention_output_shape = input_shape[:-1] + (-1,) + all_attentions[0].shape[-2:]
+            #all_attentions = tuple(t.view(*attention_output_shape) for t in all_attentions) 
+            context_layer_output_shape = input_shape[:-1] + (-1,) + all_attentions[0][0].shape[-2:]
+            attention_output_shape = input_shape[:-1] + (-1,) + all_attentions[0][1].shape[-2:]
+            all_attentions = tuple([t[0].view(*context_layer_output_shape),
+                                    t[1].view(*attention_output_shape)] for t in all_attentions) # original lines above
             outputs = outputs + (all_attentions,)
         return outputs  # last hidden state, (presents), (all hidden_states), (attentions)
 

@@ -101,7 +101,7 @@ class GPT2Extractor(object):
                 if self.model.config.output_attentions:
                     attention_heads_activations_ = np.vstack([array[0].view([
                                                                 1, 
-                                                                self.config['max_length'], 
+                                                                inputs_ids.shape[-1], 
                                                                 self.NUM_ATTENTION_HEADS, 
                                                                 self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS]).permute(0, 2, 1, 3).contiguous()  for array in encoded_layers[3]])
                     attention_heads_activations += utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping)
