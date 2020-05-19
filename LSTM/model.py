@@ -57,7 +57,7 @@ class LSTMExtractor(object):
         """
         self.model.eval()
         parameters = sorted(self.config['parameters'])
-        columns_activations = ['{}-{}'.format(name, i) for name in parameters for i in range(1, 1 + self.config['nhid'] * self.config['nlayers'])]
+        columns_activations = ['{}-layer-{}-{}'.format(name, layer, i) for name in parameters for layer in range(1, 1 + self.NUM_HIDDEN_LAYERS) for i in range(1, 1 + self.FEATURE_COUNT)]
         activations = []
         surprisals = []
         entropies = []
