@@ -94,7 +94,7 @@ def unk_transform(word, vocab=None):
         return '<unk>'
     elif not vocab:
         return word
-    elif word in vocab.idx2word:
+    elif word in vocab:
         return word
     else:
         return '<unk>'

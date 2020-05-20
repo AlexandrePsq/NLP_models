@@ -130,8 +130,8 @@ def set_seed(value=1111):
 #    return pd.DataFrame(np.vstack(activations), columns=columns_activations)
 
 
-def embeddings(model, iterator):
-    columns_activations = ['embedding-{}'.format(i) for i in range(model.param['embedding-size'])]
+def embeddings(model, iterator, embedding_size):
+    columns_activations = ['embedding-{}'.format(i) for i in range(1, 1 + embedding_size)]
     activations = []
     for item in tqdm(iterator):
         if item not in model.keys():
