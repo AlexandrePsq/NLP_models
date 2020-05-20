@@ -10,7 +10,7 @@ import numpy as np
 from tokenizer import tokenize
 from modeling_hacked_basic_features import BasicFeatures
 
-from utils import filter_args, wordrate, content_words, function_words, log_word_freq, word_position
+from utils import filter_args
 
 
 
