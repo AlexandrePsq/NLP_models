@@ -27,7 +27,7 @@ def tokenize(path, language, train=False, vocab=None):
         - path: (str) path or text
         - language: (str)  
     Returns:
-        - iterator: sentence iterator
+        - iterator: word iterator
     """
     print('Tokenizing...')
     if os.path.exists(path):
