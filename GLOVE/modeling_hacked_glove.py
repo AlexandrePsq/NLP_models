@@ -8,7 +8,8 @@ from tqdm import tqdm
 import pandas as pd
 import numpy as np
 from tokenizer import tokenize
-import utils
+
+from utils import filter_args
 
 
 
@@ -22,7 +23,7 @@ class Glove(object):
             embedding_size = 300
             training_set = 'Wikipedia-2014+Gigaword-5'
         self.init_embeddings(pretrained_glove, language)
-        self.param = {'model_type':'GLOVE', 'embedding-size':embedding_size, 'training_set':training_set, 'language':language}
+        self.param = {'model_type':'GLOVE', 'embedding_size':embedding_size, 'training_set':training_set, 'language':language}
         self.param.update(**kwargs)
         self.update_model()
     
@@ -52,10 +53,10 @@ class Glove(object):
         """ Define the name of the instance of RNNModel using
         its arguments.
         """
-        return '_'.join([self.param['model_type'], 'embedding-size', str(self.param['embedding-size']), 'language', self.param['language']])
+        return '_'.join([self.param['model_type'], 'embedding-size', str(self.param['embedding_size']), 'language', self.param['language']])
 
     def generate(self, iterator, functions):
-        dataframes = [function(self.model, iterator) for function in functions]
+        dataframes = [function(self.model, iterator, **filter_args(function, self.param)) for function in functions]
         result = pd.concat([df for df in dataframes], axis = 1)
         return result
 
