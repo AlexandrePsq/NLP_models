@@ -152,7 +152,7 @@ def function_words(iterator, language, path_to_function_words_list):
     print(len(result))
     return pd.DataFrame(result, columns=['function_words'])
 
-def log_word_freq(iterator, language, path_to_lexique_database='/neurospin/unicog/protocols/IRMf/LePetitPrince_Pallier_2018/LePetitPrince/data/text/english/lexique_database.tsv'):
+def log_frequency(iterator, language, path_to_lexique_database='/neurospin/unicog/protocols/IRMf/LePetitPrince_Pallier_2018/LePetitPrince/data/text/english/lexique_database.tsv'):
     """ Returns the logarithm of the word frequency.
     """
     iterator = sentence_to_words(iterator)
