@@ -117,7 +117,7 @@ def match_tokenized_to_untokenized(tokenized_sent, untokenized_sent, connection_
     untokenized_sent_index = 0
     tokenized_sent_index = 0
     while (untokenized_sent_index < len(untokenized_sent) and tokenized_sent_index < len(tokenized_sent)):
-        while (tokenized_sent_index+1  < len(tokenized_sent) and (not tokenized_sent[tokenized_sent_index+1].startswith(connection_character))):
+        while (tokenized_sent_index + 1  < len(tokenized_sent) and (not tokenized_sent[tokenized_sent_index + 1].startswith(connection_character))):
             mapping[untokenized_sent_index].append(tokenized_sent_index)
             tokenized_sent_index += 1
         mapping[untokenized_sent_index].append(tokenized_sent_index)
@@ -128,7 +128,7 @@ def match_tokenized_to_untokenized(tokenized_sent, untokenized_sent, connection_
 def extract_activations_from_token_activations(activation, mapping):
     """Take the average activations of the tokens related to a given word."""
     new_activations = []
-    for word_index in range(len(mapping.keys())):
+    for word_index in range(1, len(mapping.keys()) - 1):
         word_activation = []
         word_activation.append([activation[:,index, :] for index in mapping[word_index]])
         word_activation = np.vstack(word_activation)
@@ -141,7 +141,7 @@ def extract_heads_activations_from_token_activations(activation, mapping):
     activation.shape: [nb_layers, nb_heads, sequence_length, hidden_size/nb_heads]"""
     new_activations = []
     #activation = np.swapaxes(activation.squeeze(), 0, 1) # dimension: (nb_tokens, nb_heads)
-    for word_index in range(len(mapping.keys())):
+    for word_index in range(1, len(mapping.keys()) - 1):
         word_activation = []
         word_activation.append([activation[:, :, index, :] for index in mapping[word_index]])
         word_activation = np.vstack(word_activation)
