@@ -70,14 +70,14 @@ class GPT2Extractor(object):
         # Here, we give as input the text line by line.
         for line in iterator:
             line = line.strip() # Remove trailing character
-            line = '<|endoftext|> ' + line + ' <|endoftext|>' # line must start with a space to get the special start of word token
+            #line = ' ' + line  # line must start with a space to get the special start of word token
             encoded_dict = self.tokenizer.encode_plus(
                                 line,                               # Sentence to encode.
                                 add_special_tokens = False,          # Add '[CLS]' and '[SEP]'
                                 max_length = self.config['max_length'],   # Pad & truncate all sentences.
                                 return_attention_mask = True,       # Construct attn. masks.
                                 return_tensors = 'pt'               # Return pytorch tensors.
-                        )            
+                        )
             # retrieve model inputs
             inputs_ids = encoded_dict['input_ids']
             attention_mask = encoded_dict['attention_mask']
