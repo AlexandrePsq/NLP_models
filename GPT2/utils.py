@@ -95,6 +95,30 @@ def set_seed(value=1111):
         torch.cuda.manual_seed_all(value)
 
 
+#########################################
+########## Specific functions ###########
+#########################################
+
+def save(model, tokenizer, output_dir, index):
+    """ Saving best-practices: if you use defaults names for the model, 
+    you can reload it using from_pretrained().
+    """
+    output_dir = os.path.join(output_dir, index)
+    # If we save using the predefined names, we can load using `from_pretrained`
+    output_model_file = os.path.join(output_dir, WEIGHTS_NAME)
+    output_config_file = os.path.join(output_dir, CONFIG_NAME)
+    # Create output directory if needed
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    print("Saving model to %s" % output_dir)
+
+    # Save a trained model, configuration and tokenizer using `save_pretrained()`.
+    # They can then be reloaded using `from_pretrained()`
+    model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
+    torch.save(model_to_save.state_dict(), output_model_file)
+    model_to_save.config.to_json_file(output_config_file)
+    tokenizer.save_pretrained(output_dir)
+
 
 #########################################
 ###### Activations related functions ####
