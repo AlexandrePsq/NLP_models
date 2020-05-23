@@ -1,0 +1,40 @@
+#####
+Fine-tuning tempalte for GPT2.
+#####
+
+
+# General
+task: language_modeling # Task on which to fine-tune the model 
+seed: 1111 # Seed for reproductibility
+output_dir: ./LM_LPP_GPT2
+log_file: logs.txt
+local_rank: -1
+do_test: True
+metric_name: regression
+
+# Datasets
+dataset_name: lpp
+dataset_dir: "/neurospin/unicog/protocols/IRMf/LePetitPrince_Pallier_2018/LePetitPrince/data/text/english/" # Path/URL to the folder containing the dataset to use for fine-tuning
+use_output_mask: False # for token classification
+
+# Data Loader
+train_size_percentage: 0.9
+batch_size: 32
+
+# Model & Tokenizer
+pretrained_model: gpt2 # Name of (or path to) the pre-trained GPT2 model to use
+pretrained_tokenizer: gpt2 # Name of (or path to) the pre-trained GPT2 tokenizer to use
+output_attentions: True
+output_hidden_states: True
+max_length: 128
+
+# Optimizer
+learning_rate: 2e-5 # Default is 5e-5
+adam_epsilon: 1e-8 # Adam_epsilon  - default is 1e-8.
+
+# Scheduler
+num_warmup_steps: 0 # Default value in run_glue.py
+
+# Training
+nb_epochs: 3 
+nb_checkpoints: 25 # number of checkpoints at which to save model state
