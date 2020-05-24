@@ -1,5 +1,5 @@
 #####
-Fine-tuning tempalte for GPT2.
+#Fine-tuning tempalte for GPT2.
 #####
 
 
@@ -14,7 +14,7 @@ metric_name: regression
 
 # Datasets
 dataset_name: lpp
-dataset_dir: "/neurospin/unicog/protocols/IRMf/LePetitPrince_Pallier_2018/LePetitPrince/data/text/english/" # Path/URL to the folder containing the dataset to use for fine-tuning
+dataset_dir: "/Users/alexpsq/Code/Parietal/data/" # Path/URL to the folder containing the dataset to use for fine-tuning
 use_output_mask: False # for token classification
 
 # Data Loader
@@ -26,7 +26,7 @@ pretrained_model: gpt2 # Name of (or path to) the pre-trained GPT2 model to use
 pretrained_tokenizer: gpt2 # Name of (or path to) the pre-trained GPT2 tokenizer to use
 output_attentions: True
 output_hidden_states: True
-max_length: 128
+max_length: 64
 
 # Optimizer
 learning_rate: 2e-5 # Default is 5e-5
