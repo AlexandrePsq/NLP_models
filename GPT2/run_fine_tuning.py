@@ -81,6 +81,7 @@ if __name__=='__main__':
                     output_hidden_states=parameters['output_hidden_states'], # Whether the model returns all hidden-states.
         )
     tokenizer = GPT2Tokenizer.from_pretrained(parameters['pretrained_tokenizer'])
+
     model.to(device)
     logging.info("\tDone.")
 
@@ -89,7 +90,6 @@ if __name__=='__main__':
     dev_examples = processor.get_dev_examples(data)
     if parameters['do_test']:
         test_examples = processor.get_test_examples(data)
-    label_list = processor.get_labels(data)
     logging.info("\tDone.")
 
     logging.info("Get input features...")

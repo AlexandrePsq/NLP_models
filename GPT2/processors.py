@@ -2,6 +2,7 @@ import os
 import time
 import torch
 import numpy as np
+from tqdm import tqdm
 from utils import format_time
 
 from dataset import Dataset, InputExample, InputFeatures
@@ -141,7 +142,7 @@ class ModelProcessor(object):
             self.model.train()
 
             # For each batch of training data...
-            for step, batch in enumerate(train_dataloader):
+            for step, batch in tqdm(enumerate(train_dataloader)):
                 # Save model weights to have a given number of checkpoints at the end
                 if step != 0 and step % save_step == 0:
                     save(self.model, self.tokenizer, output_dir, 'checkpoint_' + str(checkpoints_index))
