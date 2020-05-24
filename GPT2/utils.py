@@ -34,7 +34,6 @@ def read_yaml(yaml_path):
             parameters = yaml.safe_load(stream)
         except :
             print("Couldn't load yaml file: {}.".format(yaml_path))
-            quit()
     return parameters
 
 def save_yaml(data, yaml_path):
