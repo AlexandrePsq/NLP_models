@@ -163,7 +163,7 @@ class ModelProcessor(object):
             print("\n  Average training loss: {0:.2f}".format(avg_train_loss))
             print("  Training epcoh took: {:}".format(training_time))
                 
-            avg_val_accuracy, avg_val_loss, validation_time, report = self.evaluate(validation_dataloader)        
+            avg_val_accuracy, avg_val_loss, validation_time = self.evaluate(validation_dataloader)        
 
             # Record all statistics from this epoch.
             training_stats.append(
@@ -173,8 +173,7 @@ class ModelProcessor(object):
                     'Valid. Loss': avg_val_loss,
                     'Valid. Accur.': avg_val_accuracy,
                     'Training Time': training_time,
-                    'Validation Time': validation_time,
-                    'report': report
+                    'Validation Time': validation_time
                 }
             )
         print("\nTraining complete!")
@@ -243,7 +242,7 @@ class ModelProcessor(object):
         #report = Metrics.report(self.metric_name, 
         #                        [item for sublist in y_true for item in sublist], 
         #                        [item for sublist in y_pred for item in sublist])
-        print(report)
+        #print(report)
         # Report the final accuracy for this validation run.
         avg_val_accuracy = total_eval_accuracy / len(dataloader)
         print("  Accuracy: {0:.2f}".format(avg_val_accuracy))
@@ -256,5 +255,5 @@ class ModelProcessor(object):
         
         print("  Validation Loss: {0:.2f}".format(avg_val_loss))
         print("  Validation took: {:}".format(validation_time))
-        return avg_val_accuracy, avg_val_loss, validation_time, report
+        return avg_val_accuracy, avg_val_loss, validation_time
             
