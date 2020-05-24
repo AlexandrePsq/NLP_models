@@ -1,4 +1,4 @@
-""" Code to fine-tune hugging-face implementation of BERT model.
+""" Code to fine-tune hugging-face implementation of GPT2 model.
 https://huggingface.co/
 """
 
