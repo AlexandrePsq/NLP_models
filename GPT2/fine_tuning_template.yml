@@ -14,7 +14,7 @@ metric_name: regression
 
 # Datasets
 dataset_name: lpp
-dataset_dir: "/Users/alexpsq/Code/Parietal/data/" # Path/URL to the folder containing the dataset to use for fine-tuning
+dataset_dir: "/neurospin/unicog/protocols/IRMf/LePetitPrince_Pallier_2018/LePetitPrince/data/text/english"  #"/Users/alexpsq/Code/Parietal/data/" # Path/URL to the folder containing the dataset to use for fine-tuning
 use_output_mask: False # for token classification
 
 # Data Loader
