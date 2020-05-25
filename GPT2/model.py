@@ -18,17 +18,20 @@ from modeling_hacked_gpt2 import GPT2Model
 class GPT2Extractor(object):
     """Container module for GPT2."""
 
-    def __init__(self, pretrained_gpt2_model, language, name, prediction_type, output_hidden_states, output_attentions, config_path=None):
+    def __init__(self, pretrained_gpt2_model, language, name, prediction_type, output_hidden_states, output_attentions, config_path=None, max_length=512, context_length=250):
         super(GPT2Extractor, self).__init__()
-        self.model = GPT2Model.from_pretrained(pretrained_gpt2_model, output_hidden_states=output_hidden_states, output_attentions=output_attentions)
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_gpt2_model)
-        
+        self.model = GPT2Model.from_pretrained(pretrained_gpt2_model, 
+                                                output_hidden_states=output_hidden_states, 
+                                                output_attentions=output_attentions,
+                                                pad_token_id=self.tokenizer.eos_token_id)
         self.language = language
+        self.pretrained_gpt2_model = pretrained_gpt2_model
         self.NUM_HIDDEN_LAYERS = self.model.config.num_hidden_layers
         self.FEATURE_COUNT = self.model.config.hidden_size
         self.NUM_ATTENTION_HEADS = self.model.config.num_attention_heads
         self.name = name
-        self.config = utils.read_yaml(config_path) if config_path else {'max_length': 128}
+        self.config = utils.read_yaml(config_path) if config_path else {'max_length': max_length, 'context_length': context_length}
         self.prediction_type = prediction_type # ['sentence', 'sequential']
 
     def __name__(self):
@@ -67,27 +70,18 @@ class GPT2Extractor(object):
         """
         hidden_states_activations = []
         attention_heads_activations = []
-        # Here, we give as input the text line by line.
-        for line in iterator:
-            line = line.strip() # Remove trailing character
-            #line = ' ' + line  # line must start with a space to get the special start of word token
-            encoded_dict = self.tokenizer.encode_plus(
-                                line,                               # Sentence to encode.
-                                add_special_tokens = False,          # Add '[CLS]' and '[SEP]'
-                                max_length = self.config['max_length'],   # Pad & truncate all sentences.
-                                return_attention_mask = True,       # Construct attn. masks.
-                                return_tensors = 'pt'               # Return pytorch tensors.
-                        )
-            # retrieve model inputs
-            inputs_ids = encoded_dict['input_ids']
-            attention_mask = encoded_dict['attention_mask']
-            token_type_ids = encoded_dict['token_type_ids']
+        # Here, we give as input the batch of line by batch of line.
+        batches, indexes = utils.batchity(iterator, self.config['context_length'], self.pretrained_gpt2_model, max_length=self.config['max_length'])
+        for index, batch in enumerate(batches):
+            batch = batch.strip() # Remove trailing character
 
-            tokenized_text = self.tokenizer.tokenize(line)
-            mapping = utils.match_tokenized_to_untokenized(tokenized_text, line)
+            tokenized_text = self.tokenizer.tokenize(batch, add_prefix_space=True)
+            inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
+            attention_mask = torch.tensor([[1 for x in tokenized_text]])
+            mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
 
             with torch.no_grad():
-                encoded_layers = self.model(inputs_ids, None, attention_mask=attention_mask, token_type_ids=token_type_ids) # last_hidden_state, pooler_output, hidden_states, attentions
+                encoded_layers = self.model(inputs_ids, attention_mask=attention_mask) # last_hidden_state, pooler_output, hidden_states, attentions
                 # last_hidden_state dimension: (batch_size, sequence_length, hidden_size)
                 # pooler_output dimension: (batch_size, hidden_size)
                 # hidden_states dimension: num_layers * (batch_size, sequence_length, hidden_size)
@@ -97,14 +91,14 @@ class GPT2Extractor(object):
                 # filtration
                 if self.model.config.output_hidden_states:
                     hidden_states_activations_ = np.vstack(encoded_layers[2]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
-                    hidden_states_activations += utils.extract_activations_from_token_activations(hidden_states_activations_, mapping)
+                    hidden_states_activations += utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes[index])
                 if self.model.config.output_attentions:
                     attention_heads_activations_ = np.vstack([array[0].view([
                                                                 1, 
                                                                 inputs_ids.shape[-1], 
                                                                 self.NUM_ATTENTION_HEADS, 
                                                                 self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS]).permute(0, 2, 1, 3).contiguous()  for array in encoded_layers[3]])
-                    attention_heads_activations += utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping)
+                    attention_heads_activations += utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping, indexes[index])
         if self.model.config.output_hidden_states:
             hidden_states_activations = pd.DataFrame(np.vstack(hidden_states_activations), columns=['hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
         if self.model.config.output_attentions:

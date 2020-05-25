@@ -123,6 +123,48 @@ def save(model, tokenizer, output_dir, index):
     model_to_save.config.to_json_file(output_config_file)
     tokenizer.save_pretrained(output_dir)
 
+def batchity(iterator, context_length, pretrained_gpt2, max_length=512):
+    """Batchify iterator sentence, to get minimum context length 
+    when possible.
+    Arguments:
+        - iterator: sentence iterator
+        - context_length: int
+    Returns:
+        - batch: sequence iterator
+        - indexes: tuple of int
+    """
+    iterator = [item.strip() for item in iterator]
+    max_length -= 2 # for special tokens
+    tokenizer = GPT2Tokenizer.from_pretrained(pretrained_gpt2)
+    
+    batch = []
+    indexes = []
+    sentence_count = 0
+    n = len(iterator)
+    
+    assert context_length < max_length
+    token_count = 0
+    while sentence_count < n and token_count < max_length:
+        token_count += len(tokenizer.tokenize(iterator[sentence_count]))
+        if token_count < max_length:
+            sentence_count += 1
+    batch.append(' '.join(iterator[:sentence_count]))
+    indexes.append((0, len(tokenizer.tokenize(batch[-1]))))
+    
+    while sentence_count < n:
+        token_count = 0
+        sentence_index = sentence_count - 1
+        tmp = sentence_count
+        while token_count < context_length:
+            token_count += len(tokenizer.tokenize(iterator[sentence_index]))
+            sentence_index -= 1
+        while sentence_count < n and token_count < max_length:
+            token_count += len(tokenizer.tokenize(iterator[sentence_count]))
+            if token_count < max_length:
+                sentence_count += 1
+        batch.append(' '.join(iterator[sentence_index+1:sentence_count]))
+        indexes.append((len(tokenizer.tokenize(' '.join(iterator[sentence_index+1:tmp]))), len(tokenizer.tokenize(batch[-1]))))
+    return batch, indexes
 
 #########################################
 ###### Activations related functions ####
@@ -153,23 +195,30 @@ def match_tokenized_to_untokenized(tokenized_sent, untokenized_sent, connection_
         tokenized_sent_index += 1
     return mapping
 
-def extract_activations_from_token_activations(activation, mapping):
+def extract_activations_from_token_activations(activation, mapping, indexes):
     """Take the average activations of the tokens related to a given word."""
     new_activations = []
-    for word_index in range(len(mapping.keys())):
+    key = None
+    for key_, value in mapping.items(): 
+        if value[0] == indexes[0]:
+            key = key_
+    for word_index in range(key, len(mapping.keys())):
         word_activation = []
         word_activation.append([activation[:,index, :] for index in mapping[word_index]])
         word_activation = np.vstack(word_activation)
         new_activations.append(np.mean(word_activation, axis=0).reshape(1,-1))
     return new_activations
 
-def extract_heads_activations_from_token_activations(activation, mapping):
+def extract_heads_activations_from_token_activations(activation, mapping, indexes):
     """Extract heads activations of each layer for each token.
     Take the average activations of the tokens related to a given word.
     activation.shape: [nb_layers, nb_heads, sequence_length, hidden_size/nb_heads]"""
     new_activations = []
-    #activation = np.swapaxes(activation.squeeze(), 0, 1) # dimension: (nb_tokens, nb_heads)
-    for word_index in range(len(mapping.keys())):
+    key = None
+    for key_, value in mapping.items(): 
+        if value[0] == indexes[0]:
+            key = key_
+    for word_index in range(key, len(mapping.keys())):
         word_activation = []
         word_activation.append([activation[:, :, index, :] for index in mapping[word_index]])
         word_activation = np.vstack(word_activation)
