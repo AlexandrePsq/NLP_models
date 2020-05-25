@@ -159,13 +159,14 @@ class BertExtractor(object):
             batch = batch.strip() # Remove trailing character
             for index_word in range(1 + indexes[index][0], len(batch.split()) + 1):
                 tmp_line = " ".join(batch.split()[:index_word])
+
                 tmp_line = tmp_line.strip() # Remove trailing characters
 
-                batch = '[CLS] ' + tmp_line + ' [SEP]'
-                tokenized_text = self.tokenizer.wordpiece_tokenizer.tokenize(batch)
+                tmp_line = '[CLS] ' + tmp_line + ' [SEP]'
+                tokenized_text = self.tokenizer.wordpiece_tokenizer.tokenize(tmp_line)
                 inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
                 attention_mask = torch.tensor([[1 for x in tokenized_text]])
-                mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
+                mapping = utils.match_tokenized_to_untokenized(tokenized_text, tmp_line)
 
                 with torch.no_grad():
                     encoded_layers = self.model(inputs_ids, attention_mask) # dimension = layer_count * len(tokenized_text) * feature_count
