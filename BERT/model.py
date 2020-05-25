@@ -157,7 +157,7 @@ class BertExtractor(object):
         batches, indexes = utils.batchity(iterator, self.config['context_length'], self.pretrained_bert_model, max_length=self.config['max_length'])
         for index, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
-            for index_word in range(1 + indexes[index], len(batch.split()) + 1):
+            for index_word in range(1 + indexes[index][0], len(batch.split()) + 1):
                 tmp_line = " ".join(batch.split()[:index_word])
                 tmp_line = tmp_line.strip() # Remove trailing characters
 
