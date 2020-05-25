@@ -143,25 +143,25 @@ def batchity(iterator, context_length, pretrained_gpt2, max_length=512):
     assert context_length < max_length
     token_count = 0
     while sentence_count < n and token_count < max_length:
-        token_count += len(tokenizer.tokenize(iterator[sentence_count]))
+        token_count += len(tokenizer.tokenize(iterator[sentence_count], add_prefix_space=True))
         if token_count < max_length:
             sentence_count += 1
     batch.append(' '.join(iterator[:sentence_count]))
-    indexes.append((0, len(tokenizer.tokenize(batch[-1]))))
+    indexes.append((0, len(tokenizer.tokenize(batch[-1], add_prefix_space=True))))
     
     while sentence_count < n:
         token_count = 0
         sentence_index = sentence_count - 1
         tmp = sentence_count
         while token_count < context_length:
-            token_count += len(tokenizer.tokenize(iterator[sentence_index]))
+            token_count += len(tokenizer.tokenize(iterator[sentence_index], add_prefix_space=True))
             sentence_index -= 1
         while sentence_count < n and token_count < max_length:
-            token_count += len(tokenizer.tokenize(iterator[sentence_count]))
+            token_count += len(tokenizer.tokenize(iterator[sentence_count], add_prefix_space=True))
             if token_count < max_length:
                 sentence_count += 1
         batch.append(' '.join(iterator[sentence_index+1:sentence_count]))
-        indexes.append((len(tokenizer.tokenize(' '.join(iterator[sentence_index+1:tmp]))), len(tokenizer.tokenize(batch[-1]))))
+        indexes.append((len(tokenizer.tokenize(' '.join(iterator[sentence_index+1:tmp]), add_prefix_space=True)), len(tokenizer.tokenize(batch[-1], add_prefix_space=True))))
     return batch, indexes
 
 #########################################
