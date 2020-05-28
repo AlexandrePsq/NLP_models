@@ -97,7 +97,7 @@ class BertExtractor(object):
         sep_attention_activations = []
         # Here, we give as input the batch of line by batch of line.
 
-        batches, indexes = utils.batchify_per_sentence_with_pre_and_post_context(iterator, self.config['number_of_sentence'], self.config['number_of_sentence_before'], self.config['number_of_sentence_after'], self.pretrained_bert, max_length=512)
+        batches, indexes = utils.batchify_per_sentence_with_pre_and_post_context(iterator, self.config['number_of_sentence'], self.config['number_of_sentence_before'], self.config['number_of_sentence_after'], self.pretrained_bert_model, max_length=512)
         for index, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
 
@@ -159,7 +159,7 @@ class BertExtractor(object):
         cls_attention_activations = []
         sep_attention_activations = []
         # Here, we give as input the batch of line by batch of line.
-        batches, indexes = utils.batchify_per_sentence_with_pre_and_post_context(iterator, self.config['number_of_sentence'], self.config['number_of_sentence_before'], self.config['number_of_sentence_after'], self.pretrained_bert, max_length=512)
+        batches, indexes = utils.batchify_per_sentence_with_pre_and_post_context(iterator, self.config['number_of_sentence'], self.config['number_of_sentence_before'], self.config['number_of_sentence_after'], self.pretrained_bert_model, max_length=512)
         for index, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
             for index_word in range(1 + indexes[index][0], len(batch.split()) + 1):
