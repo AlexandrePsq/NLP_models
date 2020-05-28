@@ -21,7 +21,7 @@ from modeling_hacked_bert import BertModel
 class BertExtractor(object):
     """Container module for BERT."""
 
-    def __init__(self, pretrained_bert_model, language, name, prediction_type, output_hidden_states, output_attentions, config_path=None, max_length=512, context_length=250):
+    def __init__(self, pretrained_bert_model, language, name, prediction_type, output_hidden_states, output_attentions, config_path=None, max_length=512, context_length=250, number_of_sentence=1, number_of_sentence_before=0, number_of_sentence_after=0):
         super(BertExtractor, self).__init__()
         # Load pre-trained model tokenizer (vocabulary)
         # Crucially, do not do basic tokenization; PTB is tokenized. Just do wordpiece tokenization.
@@ -34,7 +34,11 @@ class BertExtractor(object):
         self.FEATURE_COUNT = self.model.config.hidden_size
         self.NUM_ATTENTION_HEADS = self.model.config.num_attention_heads
         self.name = name
-        self.config = utils.read_yaml(config_path) if config_path else {'max_length': max_length, 'context_length': context_length}
+        self.config = utils.read_yaml(config_path) if config_path else {'max_length': max_length, 
+                                                                        'context_length': context_length,
+                                                                        'number_of_sentence': number_of_sentence,
+                                                                        'number_of_sentence_before': number_of_sentence_before,
+                                                                        'number_of_sentence_after': number_of_sentence_after}
         self.prediction_type = prediction_type # ['sentence', 'sequential']
 
     def __name__(self):
@@ -92,7 +96,8 @@ class BertExtractor(object):
         cls_attention_activations = []
         sep_attention_activations = []
         # Here, we give as input the batch of line by batch of line.
-        batches, indexes = utils.batchity(iterator, self.config['context_length'], self.pretrained_bert_model, max_length=self.config['max_length'])
+
+        batches, indexes = utils.batchify_per_sentence_with_pre_and_post_context(iterator, self.config['number_of_sentence'], self.config['number_of_sentence_before'], self.config['number_of_sentence_after'], self.pretrained_bert, max_length=512)
         for index, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
 
@@ -103,7 +108,7 @@ class BertExtractor(object):
             mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
 
             with torch.no_grad():
-                encoded_layers = self.model(inputs_ids, attention_mask) # last_hidden_state, pooler_output, hidden_states, attentions
+                encoded_layers = self.model(inputs_ids, attention_mask=attention_mask) # last_hidden_state, pooler_output, hidden_states, attentions
                 # last_hidden_state dimension: (batch_size, sequence_length, hidden_size)
                 # pooler_output dimension: (batch_size, hidden_size)
                 # hidden_states dimension: num_layers * (batch_size, sequence_length, hidden_size)
@@ -154,7 +159,7 @@ class BertExtractor(object):
         cls_attention_activations = []
         sep_attention_activations = []
         # Here, we give as input the batch of line by batch of line.
-        batches, indexes = utils.batchity(iterator, self.config['context_length'], self.pretrained_bert_model, max_length=self.config['max_length'])
+        batches, indexes = utils.batchify_per_sentence_with_pre_and_post_context(iterator, self.config['number_of_sentence'], self.config['number_of_sentence_before'], self.config['number_of_sentence_after'], self.pretrained_bert, max_length=512)
         for index, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
             for index_word in range(1 + indexes[index][0], len(batch.split()) + 1):

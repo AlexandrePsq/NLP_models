@@ -18,7 +18,7 @@ from modeling_hacked_gpt2 import GPT2Model
 class GPT2Extractor(object):
     """Container module for GPT2."""
 
-    def __init__(self, pretrained_gpt2_model, language, name, prediction_type, output_hidden_states, output_attentions, config_path=None, max_length=512, context_length=250):
+    def __init__(self, pretrained_gpt2_model, language, name, prediction_type, output_hidden_states, output_attentions, config_path=None, max_length=512, context_length=250, number_of_sentence=1, number_sentence_before=0):
         super(GPT2Extractor, self).__init__()
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_gpt2_model)
         self.model = GPT2Model.from_pretrained(pretrained_gpt2_model, 
@@ -31,7 +31,10 @@ class GPT2Extractor(object):
         self.FEATURE_COUNT = self.model.config.hidden_size
         self.NUM_ATTENTION_HEADS = self.model.config.num_attention_heads
         self.name = name
-        self.config = utils.read_yaml(config_path) if config_path else {'max_length': max_length, 'context_length': context_length}
+        self.config = utils.read_yaml(config_path) if config_path else {'max_length': max_length, 
+                                                                        'context_length': context_length,
+                                                                        'number_of_sentence': number_of_sentence,
+                                                                        'number_sentence_before': number_sentence_before}
         self.prediction_type = prediction_type # ['sentence', 'sequential']
 
     def __name__(self):
@@ -71,7 +74,7 @@ class GPT2Extractor(object):
         hidden_states_activations = []
         attention_heads_activations = []
         # Here, we give as input the batch of line by batch of line.
-        batches, indexes = utils.batchity(iterator, self.config['context_length'], self.pretrained_gpt2_model, max_length=self.config['max_length'])
+        batches, indexes = utils.batchify_per_sentence_with_context(iterator, self.config['number_of_sentence'], self.config['number_sentence_before'], self.pretrained_gpt2_model, max_length=self.config['max_length'])
         for index, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
 

@@ -125,7 +125,139 @@ def save(model, tokenizer, output_dir, index):
     model_to_save.config.to_json_file(output_config_file)
     tokenizer.save_pretrained(output_dir)
 
-def batchity(iterator, context_length, pretrained_bert, max_length=512):
+def batchify_per_sentence(iterator, number_of_sentence, pretrained_bert, max_length=512):
+    """Batchify iterator sentence, to get batches of specified number of sentences.
+    Arguments:
+        - iterator: sentence iterator
+        - number_of_sentence: int
+    Returns:
+        - batch: sequence iterator
+        - indexes: tuple of int
+    """
+    iterator = [item.strip() for item in iterator]
+    max_length -= 2 # for special tokens
+    tokenizer = BertTokenizer.from_pretrained(pretrained_bert)
+    
+    batch = []
+    indexes = []
+    sentence_count = 0
+    batch_modifications = 0
+    n = len(iterator)
+    while sentence_count < n:
+        stop = min(sentence_count+number_of_sentence, n)
+        token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[sentence_count:stop])))
+        while token_count > max_length:
+            print('WARNING: decreasing number of sentence in a batch to fit max length of {}'.format(max_length))
+            batch_modifications += 1
+            stop -= 1
+            token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[sentence_count:stop])))
+        batch.append(' '.join(iterator[sentence_count:stop]))
+        indexes.append((0, len(tokenizer.wordpiece_tokenizer.tokenize(batch[-1]))))
+        sentence_count = stop
+    if batch_modifications > 0:
+        print('WARNING: {} reductions were done when constructing batches... You should reduce the number of sentence to include.'.format(batch_modifications))
+    return batch, indexes
+
+def batchify_per_sentence_with_context(iterator, number_of_sentence, number_sentence_before, pretrained_bert, max_length=512):
+    """Batchify iterator sentence, to get batches of specified number of sentences.
+    Arguments:
+        - iterator: sentence iterator
+        - number_of_sentence: int
+        - number_sentence_before: int
+    Returns:
+        - batch: sequence iterator
+        - indexes: tuple of int
+    """
+    iterator = [item.strip() for item in iterator]
+    max_length -= 2 # for special tokens
+    assert number_of_sentence > 0
+    tokenizer = BertTokenizer.from_pretrained(pretrained_bert)
+    
+    batch = []
+    indexes = []
+    sentence_count = 0
+    batch_modifications = 0
+    n = len(iterator)
+    if number_sentence_before > 0:
+        start = 0
+        stop = min(number_sentence_before, n)
+        token_count = len(tokenizer.wordpiece_tokenizer.tokenize(iterator[stop]))
+        if token_count > max_length:
+            raise ValueError('Cannot fit context with additional sentence. You should reduce context length.')
+        batch.append(' '.join(iterator[:stop]))
+        indexes.append((0, len(tokenizer.wordpiece_tokenizer.tokenize(batch[-1]))))
+        sentence_count = stop
+
+    while sentence_count < n:
+        start = sentence_count - number_sentence_before
+        stop = min(sentence_count + number_of_sentence, n)
+        token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:stop])))
+        while token_count > max_length:
+            print('WARNING: decreasing number of sentence in a batch to fit max length of {}'.format(max_length))
+            batch_modifications += 1
+            stop -= 1
+            token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[sentence_count:stop])))
+            if stop==start+number_sentence_before:
+                raise ValueError('Too many context sentence. You reach {} tokens only with context.'.format(token_count))
+        batch.append(' '.join(iterator[start:stop]))
+        indexes.append((len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:start+number_sentence_before]))), len(tokenizer.wordpiece_tokenizer.tokenize(batch[-1]))))
+        sentence_count = stop
+    if batch_modifications > 0:
+        print('WARNING: {} reductions were done when constructing batches... You should reduce the number of sentence to include.'.format(batch_modifications))
+    return batch, indexes
+
+def batchify_per_sentence_with_pre_and_post_context(iterator, number_of_sentence, number_sentence_before, number_sentence_after, pretrained_bert, max_length=512):
+    """Batchify iterator sentence, to get batches of specified number of sentences.
+    Arguments:
+        - iterator: sentence iterator
+        - number_of_sentence: int
+        - number_sentence_before: int
+        - number_sentence_after: int
+    Returns:
+        - batch: sequence iterator
+        - indexes: tuple of int
+    """
+    iterator = [item.strip() for item in iterator]
+    max_length -= 2 # for special tokens
+    assert number_of_sentence > 0
+    tokenizer = BertTokenizer.from_pretrained(pretrained_bert)
+    
+    batch = []
+    indexes = []
+    sentence_count = 0
+    batch_modifications = 0
+    n = len(iterator)
+    if number_sentence_before > 0:
+        start = 0
+        stop = min(number_sentence_before, n)
+        token_count = len(tokenizer.wordpiece_tokenizer.tokenize(iterator[stop]))
+        if token_count > max_length:
+            raise ValueError('Cannot fit context with additional sentence. You should reduce context length.')
+        batch.append(' '.join(iterator[:stop]))
+        indexes.append((0, len(tokenizer.wordpiece_tokenizer.tokenize(batch[-1]))))
+        sentence_count = stop
+
+    while sentence_count < n:
+        start = sentence_count - number_sentence_before
+        stop = min(sentence_count + number_of_sentence, n)
+        stop_post_context = min(stop + number_sentence_after, n)
+        token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:stop_post_context])))
+        while token_count > max_length:
+            print('WARNING: decreasing number of sentence in a batch to fit max length of {}'.format(max_length))
+            batch_modifications += 1
+            stop -= 1
+            stop_post_context = min(stop + number_sentence_after, n)
+            token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:stop_post_context])))
+            if stop==start+number_sentence_before:
+                raise ValueError('Too many context sentence. You reach {} tokens only with context.'.format(token_count))
+        batch.append(' '.join(iterator[start:stop_post_context]))
+        indexes.append((len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:start+number_sentence_before]))), len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:stop])))))
+        sentence_count = stop
+    if batch_modifications > 0:
+        print('WARNING: {} reductions were done when constructing batches... You should reduce the number of sentence to include.'.format(batch_modifications))
+    return batch, indexes
+
+def batchify(iterator, context_length, pretrained_bert, max_length=512):
     """Batchify iterator sentence, to get minimum context length 
     when possible.
     Arguments:
@@ -200,11 +332,15 @@ def match_tokenized_to_untokenized(tokenized_sent, untokenized_sent):
 def extract_activations_from_token_activations(activation, mapping, indexes):
     """Take the average activations of the tokens related to a given word."""
     new_activations = []
-    key = None
+    key_start = None
+    key_stop = None
     for key_, value in mapping.items(): 
-        if value[0] == (indexes[0] + 1): #because we added [CLS] token at the beginning
-            key = key_
-    for word_index in range(key, len(mapping.keys()) - 1): #because we added [SEP] token at the end
+        if (value[0] - 1)== (indexes[0]): #because we added [CLS] token at the beginning
+            key_start = key_
+    for key_, value in mapping.items(): 
+        if value[-1] == (indexes[1]): #because we added [CLS] token at the beginning
+            key_stop = key_
+    for word_index in range(key_start, key_stop + 1): # len(mapping.keys()) - 1
         word_activation = []
         word_activation.append([activation[:,index, :] for index in mapping[word_index]])
         word_activation = np.vstack(word_activation)
