@@ -146,14 +146,14 @@ def batchify_per_sentence(iterator, number_of_sentence, pretrained_roberta, max_
     n = len(iterator)
     while sentence_count < n:
         stop = min(sentence_count+number_of_sentence, n)
-        token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[sentence_count:stop])))
+        token_count = len(tokenizer.tokenize(' '.join(iterator[sentence_count:stop]), add_prefix_space=True))
         while token_count > max_length:
             print('WARNING: decreasing number of sentence in a batch to fit max length of {}'.format(max_length))
             batch_modifications += 1
             stop -= 1
-            token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[sentence_count:stop])))
+            token_count = len(tokenizer.tokenize(' '.join(iterator[sentence_count:stop]), add_prefix_space=True))
         batch.append(' '.join(iterator[sentence_count:stop]))
-        indexes.append((0, len(tokenizer.wordpiece_tokenizer.tokenize(batch[-1]))))
+        indexes.append((0, len(tokenizer.tokenize(batch[-1], add_prefix_space=True))))
         sentence_count = stop
     if batch_modifications > 0:
         print('WARNING: {} reductions were done when constructing batches... You should reduce the number of sentence to include.'.format(batch_modifications))
@@ -182,26 +182,26 @@ def batchify_per_sentence_with_context(iterator, number_of_sentence, number_sent
     if number_sentence_before > 0:
         start = 0
         stop = min(number_sentence_before, n)
-        token_count = len(tokenizer.wordpiece_tokenizer.tokenize(iterator[stop]))
+        token_count = len(tokenizer.tokenize(iterator[stop], add_prefix_space=True))
         if token_count > max_length:
             raise ValueError('Cannot fit context with additional sentence. You should reduce context length.')
         batch.append(' '.join(iterator[:stop]))
-        indexes.append((0, len(tokenizer.wordpiece_tokenizer.tokenize(batch[-1]))))
+        indexes.append((0, len(tokenizer.tokenize(batch[-1], add_prefix_space=True))))
         sentence_count = stop
 
     while sentence_count < n:
         start = sentence_count - number_sentence_before
         stop = min(sentence_count + number_of_sentence, n)
-        token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:stop])))
+        token_count = len(tokenizer.tokenize(' '.join(iterator[start:stop]), add_prefix_space=True))
         while token_count > max_length:
             print('WARNING: decreasing number of sentence in a batch to fit max length of {}'.format(max_length))
             batch_modifications += 1
             stop -= 1
-            token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[sentence_count:stop])))
+            token_count = len(tokenizer.tokenize(' '.join(iterator[sentence_count:stop]), add_prefix_space=True))
             if stop==start+number_sentence_before:
                 raise ValueError('Too many context sentence. You reach {} tokens only with context.'.format(token_count))
         batch.append(' '.join(iterator[start:stop]))
-        indexes.append((len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:start+number_sentence_before]))), len(tokenizer.wordpiece_tokenizer.tokenize(batch[-1]))))
+        indexes.append((len(tokenizer.tokenize(' '.join(iterator[start:start+number_sentence_before]), add_prefix_space=True)), len(tokenizer.tokenize(batch[-1], add_prefix_space=True))))
         sentence_count = stop
     if batch_modifications > 0:
         print('WARNING: {} reductions were done when constructing batches... You should reduce the number of sentence to include.'.format(batch_modifications))
@@ -231,28 +231,28 @@ def batchify_per_sentence_with_pre_and_post_context(iterator, number_of_sentence
     if number_sentence_before > 0:
         start = 0
         stop = min(number_sentence_before, n)
-        token_count = len(tokenizer.wordpiece_tokenizer.tokenize(iterator[stop]))
+        token_count = len(tokenizer.tokenize(iterator[stop], add_prefix_space=True))
         if token_count > max_length:
             raise ValueError('Cannot fit context with additional sentence. You should reduce context length.')
         batch.append(' '.join(iterator[:stop]))
-        indexes.append((0, len(tokenizer.wordpiece_tokenizer.tokenize(batch[-1]))))
+        indexes.append((0, len(tokenizer.tokenize(batch[-1], add_prefix_space=True))))
         sentence_count = stop
 
     while sentence_count < n:
         start = sentence_count - number_sentence_before
         stop = min(sentence_count + number_of_sentence, n)
         stop_post_context = min(stop + number_sentence_after, n)
-        token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:stop_post_context])))
+        token_count = len(tokenizer.tokenize(' '.join(iterator[start:stop_post_context]), add_prefix_space=True))
         while token_count > max_length:
             print('WARNING: decreasing number of sentence in a batch to fit max length of {}'.format(max_length))
             batch_modifications += 1
             stop -= 1
             stop_post_context = min(stop + number_sentence_after, n)
-            token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:stop_post_context])))
+            token_count = len(tokenizer.tokenize(' '.join(iterator[start:stop_post_context]), add_prefix_space=True))
             if stop==start+number_sentence_before:
                 raise ValueError('Too many context sentence. You reach {} tokens only with context.'.format(token_count))
         batch.append(' '.join(iterator[start:stop_post_context]))
-        indexes.append((len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:start+number_sentence_before]))), len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:stop])))))
+        indexes.append((len(tokenizer.tokenize(' '.join(iterator[start:start+number_sentence_before]), add_prefix_space=True)), len(tokenizer.tokenize(' '.join(iterator[start:stop]), add_prefix_space=True))))
         sentence_count = stop
     if batch_modifications > 0:
         print('WARNING: {} reductions were done when constructing batches... You should reduce the number of sentence to include.'.format(batch_modifications))
@@ -280,25 +280,25 @@ def batchify(iterator, context_length, pretrained_roberta, max_length=512):
     assert context_length < max_length
     token_count = 0
     while sentence_count < n and token_count < max_length:
-        token_count += len(tokenizer.wordpiece_tokenizer.tokenize(iterator[sentence_count]))
+        token_count += len(tokenizer.tokenize(iterator[sentence_count], add_prefix_space=True))
         if token_count < max_length:
             sentence_count += 1
     batch.append(' '.join(iterator[:sentence_count]))
-    indexes.append((0, len(tokenizer.wordpiece_tokenizer.tokenize(batch[-1]))))
+    indexes.append((0, len(tokenizer.tokenize(batch[-1], add_prefix_space=True))))
     
     while sentence_count < n:
         token_count = 0
         sentence_index = sentence_count - 1
         tmp = sentence_count
         while token_count < context_length:
-            token_count += len(tokenizer.wordpiece_tokenizer.tokenize(iterator[sentence_index]))
+            token_count += len(tokenizer.tokenize(iterator[sentence_index], add_prefix_space=True))
             sentence_index -= 1
         while sentence_count < n and token_count < max_length:
-            token_count += len(tokenizer.wordpiece_tokenizer.tokenize(iterator[sentence_count]))
+            token_count += len(tokenizer.tokenize(iterator[sentence_count], add_prefix_space=True))
             if token_count < max_length:
                 sentence_count += 1
         batch.append(' '.join(iterator[sentence_index+1:sentence_count]))
-        indexes.append((len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[sentence_index+1:tmp]))), len(tokenizer.wordpiece_tokenizer.tokenize(batch[-1]))))
+        indexes.append((len(tokenizer.tokenize(' '.join(iterator[sentence_index+1:tmp]), add_prefix_space=True)), len(tokenizer.tokenize(batch[-1], add_prefix_space=True))))
     return batch, indexes
 
 #########################################
