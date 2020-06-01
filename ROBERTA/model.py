@@ -116,7 +116,7 @@ class RobertaExtractor(object):
             batch = batch.strip() # Remove trailing character
 
             batch = '<s> ' + batch + ' </s>'
-            tokenized_text = self.tokenizer.tokenize(batch)
+            tokenized_text = self.tokenizer.tokenize(batch, add_prefix_space=True)
             inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
             attention_mask = torch.tensor([[1 for x in tokenized_text]])
             mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
@@ -177,11 +177,25 @@ class RobertaExtractor(object):
 
         for index, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
-            for index_word in range(1 + indexes[index][0], len(batch.split()) + 1):
-                tmp_line = " ".join(batch.split()[:index_word])
+
+            batch_tmp = '<s> ' + batch + ' </s>'
+            tokenized_batch = self.tokenizer.tokenize(batch_tmp, add_prefix_space=True)
+            mapping_batch = utils.match_tokenized_to_untokenized(tokenized_batch, batch_tmp)
+
+            last_index = indexes[index][0]
+            key_start=None
+            for key_, value in mapping_batch.items(): 
+                if (value[0] - 1) == (indexes[index][0]): #because we added [CLS] token at the beginning
+                    key_start = key_
+                    
+            for index_word in range(key_start, len(batch.split()) + 1):
+                tmp_line = " ".join(batch.split()[:index_word])                
+                tmp_line = tmp_line.strip() # Remove trailing characters
 
                 tmp_line = '<s> ' + tmp_line + ' </s>'
-                tokenized_text = self.tokenizer.tokenize(tmp_line)
+                last_index += len(self.tokenizer.tokenize(tmp_line.split()[-2]), add_prefix_space=True)
+
+                tokenized_text = self.tokenizer.tokenize(tmp_line, add_prefix_space=True)
                 inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
                 attention_mask = torch.tensor([[1 for x in tokenized_text]])
                 mapping = utils.match_tokenized_to_untokenized(tokenized_text, tmp_line)
@@ -191,7 +205,7 @@ class RobertaExtractor(object):
                     # filtration
                     if self.model.config.output_hidden_states:
                         hidden_states_activations_ = np.vstack(encoded_layers[2]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
-                        hidden_states_activations.append(utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes[index])[-1])
+                        hidden_states_activations.append(utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, (indexes[index][0], last_index))[-1])
                         cls_activations_, sep_activations_ = utils.extract_activations_from_special_tokens(hidden_states_activations_, mapping)
                         cls_hidden_states_activations += cls_activations_
                         sep_hidden_states_activations += sep_activations_
@@ -201,7 +215,7 @@ class RobertaExtractor(object):
                                                                 self.config['max_length'], 
                                                                 self.NUM_ATTENTION_HEADS, 
                                                                 self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS]).permute(0, 2, 1, 3).contiguous()  for array in encoded_layers[3]])
-                        attention_heads_activations.append(utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping, indexes[index])[-1])
+                        attention_heads_activations.append(utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping, (indexes[index][0], last_index))[-1])
                         cls_attention_, sep_attention_ = utils.extract_heads_activations_from_special_tokens(attention_heads_activations_, mapping)
                         cls_attention_activations += cls_attention_
                         sep_attention_activations += sep_attention_
