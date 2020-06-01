@@ -21,7 +21,21 @@ from modeling_hacked_bert import BertModel
 class BertExtractor(object):
     """Container module for BERT."""
 
-    def __init__(self, pretrained_bert_model, language, name, prediction_type, output_hidden_states, output_attentions, config_path=None, max_length=512, context_length=250, number_of_sentence=1, number_of_sentence_before=0, number_of_sentence_after=0):
+    def __init__(
+        self, 
+        pretrained_bert_model, 
+        language, 
+        name, 
+        prediction_type, 
+        output_hidden_states, 
+        output_attentions, 
+        config_path=None, 
+        max_length=512, 
+        context_length=250, 
+        number_of_sentence=1, 
+        number_of_sentence_before=0, 
+        number_of_sentence_after=0
+        ):
         super(BertExtractor, self).__init__()
         # Load pre-trained model tokenizer (vocabulary)
         # Crucially, do not do basic tokenization; PTB is tokenized. Just do wordpiece tokenization.
@@ -174,7 +188,7 @@ class BertExtractor(object):
                 mapping = utils.match_tokenized_to_untokenized(tokenized_text, tmp_line)
 
                 with torch.no_grad():
-                    encoded_layers = self.model(inputs_ids, attention_mask) # dimension = layer_count * len(tokenized_text) * feature_count
+                    encoded_layers = self.model(inputs_ids, attention_mask=attention_mask) # dimension = layer_count * len(tokenized_text) * feature_count
                     # filtration
                     if self.model.config.output_hidden_states:
                         hidden_states_activations_ = np.vstack(encoded_layers[2]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
