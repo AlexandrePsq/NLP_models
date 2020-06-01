@@ -365,11 +365,15 @@ def extract_heads_activations_from_token_activations(activation, mapping, indexe
     Take the average activations of the tokens related to a given word.
     activation.shape: [nb_layers, nb_heads, sequence_length, hidden_size/nb_heads]"""
     new_activations = []
-    key = None
+    key_start = None
+    key_stop = None
     for key_, value in mapping.items(): 
-        if value[0] == (indexes[0] + 1): #because we added [CLS] token at the beginning
-            key = key_
-    for word_index in range(key, len(mapping.keys()) - 1): #because we added [SEP] token at the end
+        if (value[0] - 1)== (indexes[0]): #because we added [CLS] token at the beginning
+            key_start = key_
+    for key_, value in mapping.items(): 
+        if value[-1] == (indexes[1]): #because we added [CLS] token at the beginning
+            key_stop = key_
+    for word_index in range(key_start, key_stop + 1): # len(mapping.keys()) - 1
         word_activation = []
         word_activation.append([activation[:, :, index, :] for index in mapping[word_index]])
         word_activation = np.vstack(word_activation)
