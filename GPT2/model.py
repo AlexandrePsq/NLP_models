@@ -18,7 +18,20 @@ from modeling_hacked_gpt2 import GPT2Model
 class GPT2Extractor(object):
     """Container module for GPT2."""
 
-    def __init__(self, pretrained_gpt2_model, language, name, prediction_type, output_hidden_states, output_attentions, config_path=None, max_length=512, context_length=250, number_of_sentence=1, number_sentence_before=0):
+    def __init__(
+        self, 
+        pretrained_gpt2_model, 
+        language, 
+        name, 
+        prediction_type, 
+        output_hidden_states, 
+        output_attentions, 
+        config_path=None, 
+        max_length=512, 
+        context_length=250, 
+        number_of_sentence=1, 
+        number_of_sentence_before=0
+        ):
         super(GPT2Extractor, self).__init__()
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_gpt2_model)
         self.model = GPT2Model.from_pretrained(pretrained_gpt2_model, 
@@ -34,7 +47,7 @@ class GPT2Extractor(object):
         self.config = utils.read_yaml(config_path) if config_path else {'max_length': max_length, 
                                                                         'context_length': context_length,
                                                                         'number_of_sentence': number_of_sentence,
-                                                                        'number_sentence_before': number_sentence_before}
+                                                                        'number_of_sentence_before': number_of_sentence_before}
         self.prediction_type = prediction_type # ['sentence', 'sequential']
 
     def __name__(self):
