@@ -16,9 +16,8 @@ from collections import defaultdict
 
 from torch.utils.data import TensorDataset, random_split
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
-from transformers import BertForQuestionAnswering, AdamW, BertConfig, get_linear_schedule_with_warmup
-from transformers import BertForNextSentencePrediction, BertForSequenceClassification, BertForTokenClassification
-from transformers import BertTokenizer, BertModel, BertForPreTraining, BertForMaskedLM, WEIGHTS_NAME, CONFIG_NAME
+from transformers import WEIGHTS_NAME, CONFIG_NAME
+from transformers import AutoTokenizer
 
 
 
@@ -127,6 +126,180 @@ def save(model, tokenizer, output_dir, index):
     model_to_save.config.to_json_file(output_config_file)
     tokenizer.save_pretrained(output_dir)
 
+def batchify_per_sentence(iterator, number_of_sentence, pretrained_roberta, max_length=512):
+    """Batchify iterator sentence, to get batches of specified number of sentences.
+    Arguments:
+        - iterator: sentence iterator
+        - number_of_sentence: int
+    Returns:
+        - batch: sequence iterator
+        - indexes: tuple of int
+    """
+    iterator = [item.strip() for item in iterator]
+    max_length -= 2 # for special tokens
+    tokenizer = AutoTokenizer.from_pretrained(pretrained_roberta)
+    
+    batch = []
+    indexes = []
+    sentence_count = 0
+    batch_modifications = 0
+    n = len(iterator)
+    while sentence_count < n:
+        stop = min(sentence_count+number_of_sentence, n)
+        token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[sentence_count:stop])))
+        while token_count > max_length:
+            print('WARNING: decreasing number of sentence in a batch to fit max length of {}'.format(max_length))
+            batch_modifications += 1
+            stop -= 1
+            token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[sentence_count:stop])))
+        batch.append(' '.join(iterator[sentence_count:stop]))
+        indexes.append((0, len(tokenizer.wordpiece_tokenizer.tokenize(batch[-1]))))
+        sentence_count = stop
+    if batch_modifications > 0:
+        print('WARNING: {} reductions were done when constructing batches... You should reduce the number of sentence to include.'.format(batch_modifications))
+    return batch, indexes
+
+def batchify_per_sentence_with_context(iterator, number_of_sentence, number_sentence_before, pretrained_roberta, max_length=512):
+    """Batchify iterator sentence, to get batches of specified number of sentences.
+    Arguments:
+        - iterator: sentence iterator
+        - number_of_sentence: int
+        - number_sentence_before: int
+    Returns:
+        - batch: sequence iterator
+        - indexes: tuple of int
+    """
+    iterator = [item.strip() for item in iterator]
+    max_length -= 2 # for special tokens
+    assert number_of_sentence > 0
+    tokenizer = AutoTokenizer.from_pretrained(pretrained_roberta)
+    
+    batch = []
+    indexes = []
+    sentence_count = 0
+    batch_modifications = 0
+    n = len(iterator)
+    if number_sentence_before > 0:
+        start = 0
+        stop = min(number_sentence_before, n)
+        token_count = len(tokenizer.wordpiece_tokenizer.tokenize(iterator[stop]))
+        if token_count > max_length:
+            raise ValueError('Cannot fit context with additional sentence. You should reduce context length.')
+        batch.append(' '.join(iterator[:stop]))
+        indexes.append((0, len(tokenizer.wordpiece_tokenizer.tokenize(batch[-1]))))
+        sentence_count = stop
+
+    while sentence_count < n:
+        start = sentence_count - number_sentence_before
+        stop = min(sentence_count + number_of_sentence, n)
+        token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:stop])))
+        while token_count > max_length:
+            print('WARNING: decreasing number of sentence in a batch to fit max length of {}'.format(max_length))
+            batch_modifications += 1
+            stop -= 1
+            token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[sentence_count:stop])))
+            if stop==start+number_sentence_before:
+                raise ValueError('Too many context sentence. You reach {} tokens only with context.'.format(token_count))
+        batch.append(' '.join(iterator[start:stop]))
+        indexes.append((len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:start+number_sentence_before]))), len(tokenizer.wordpiece_tokenizer.tokenize(batch[-1]))))
+        sentence_count = stop
+    if batch_modifications > 0:
+        print('WARNING: {} reductions were done when constructing batches... You should reduce the number of sentence to include.'.format(batch_modifications))
+    return batch, indexes
+
+def batchify_per_sentence_with_pre_and_post_context(iterator, number_of_sentence, number_sentence_before, number_sentence_after, pretrained_roberta, max_length=512):
+    """Batchify iterator sentence, to get batches of specified number of sentences.
+    Arguments:
+        - iterator: sentence iterator
+        - number_of_sentence: int
+        - number_sentence_before: int
+        - number_sentence_after: int
+    Returns:
+        - batch: sequence iterator
+        - indexes: tuple of int
+    """
+    iterator = [item.strip() for item in iterator]
+    max_length -= 2 # for special tokens
+    assert number_of_sentence > 0
+    tokenizer = AutoTokenizer.from_pretrained(pretrained_roberta)
+    
+    batch = []
+    indexes = []
+    sentence_count = 0
+    batch_modifications = 0
+    n = len(iterator)
+    if number_sentence_before > 0:
+        start = 0
+        stop = min(number_sentence_before, n)
+        token_count = len(tokenizer.wordpiece_tokenizer.tokenize(iterator[stop]))
+        if token_count > max_length:
+            raise ValueError('Cannot fit context with additional sentence. You should reduce context length.')
+        batch.append(' '.join(iterator[:stop]))
+        indexes.append((0, len(tokenizer.wordpiece_tokenizer.tokenize(batch[-1]))))
+        sentence_count = stop
+
+    while sentence_count < n:
+        start = sentence_count - number_sentence_before
+        stop = min(sentence_count + number_of_sentence, n)
+        stop_post_context = min(stop + number_sentence_after, n)
+        token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:stop_post_context])))
+        while token_count > max_length:
+            print('WARNING: decreasing number of sentence in a batch to fit max length of {}'.format(max_length))
+            batch_modifications += 1
+            stop -= 1
+            stop_post_context = min(stop + number_sentence_after, n)
+            token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:stop_post_context])))
+            if stop==start+number_sentence_before:
+                raise ValueError('Too many context sentence. You reach {} tokens only with context.'.format(token_count))
+        batch.append(' '.join(iterator[start:stop_post_context]))
+        indexes.append((len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:start+number_sentence_before]))), len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:stop])))))
+        sentence_count = stop
+    if batch_modifications > 0:
+        print('WARNING: {} reductions were done when constructing batches... You should reduce the number of sentence to include.'.format(batch_modifications))
+    return batch, indexes
+
+def batchify(iterator, context_length, pretrained_roberta, max_length=512):
+    """Batchify iterator sentence, to get minimum context length 
+    when possible.
+    Arguments:
+        - iterator: sentence iterator
+        - context_length: int
+    Returns:
+        - batch: sequence iterator
+        - indexes: tuple of int
+    """
+    iterator = [item.strip() for item in iterator]
+    max_length -= 2 # for special tokens
+    tokenizer = AutoTokenizer.from_pretrained(pretrained_roberta)
+    
+    batch = []
+    indexes = []
+    sentence_count = 0
+    n = len(iterator)
+    
+    assert context_length < max_length
+    token_count = 0
+    while sentence_count < n and token_count < max_length:
+        token_count += len(tokenizer.wordpiece_tokenizer.tokenize(iterator[sentence_count]))
+        if token_count < max_length:
+            sentence_count += 1
+    batch.append(' '.join(iterator[:sentence_count]))
+    indexes.append((0, len(tokenizer.wordpiece_tokenizer.tokenize(batch[-1]))))
+    
+    while sentence_count < n:
+        token_count = 0
+        sentence_index = sentence_count - 1
+        tmp = sentence_count
+        while token_count < context_length:
+            token_count += len(tokenizer.wordpiece_tokenizer.tokenize(iterator[sentence_index]))
+            sentence_index -= 1
+        while sentence_count < n and token_count < max_length:
+            token_count += len(tokenizer.wordpiece_tokenizer.tokenize(iterator[sentence_count]))
+            if token_count < max_length:
+                sentence_count += 1
+        batch.append(' '.join(iterator[sentence_index+1:sentence_count]))
+        indexes.append((len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[sentence_index+1:tmp]))), len(tokenizer.wordpiece_tokenizer.tokenize(batch[-1]))))
+    return batch, indexes
 
 #########################################
 ###### Activations related functions ####
@@ -155,11 +328,19 @@ def match_tokenized_to_untokenized(tokenized_sent, untokenized_sent, connection_
         untokenized_sent_index += 1
         tokenized_sent_index += 1
     return mapping
-
-def extract_activations_from_token_activations(activation, mapping):
+    
+def extract_activations_from_token_activations(activation, mapping, indexes):
     """Take the average activations of the tokens related to a given word."""
     new_activations = []
-    for word_index in range(1, len(mapping.keys()) - 1):
+    key_start = None
+    key_stop = None
+    for key_, value in mapping.items(): 
+        if (value[0] - 1) == (indexes[0]): #because we added [CLS] token at the beginning
+            key_start = key_
+    for key_, value in mapping.items(): 
+        if value[-1] == (indexes[1]): #because we added [CLS] token at the beginning
+            key_stop = key_
+    for word_index in range(key_start, key_stop + 1): # len(mapping.keys()) - 1
         word_activation = []
         word_activation.append([activation[:,index, :] for index in mapping[word_index]])
         word_activation = np.vstack(word_activation)
@@ -179,13 +360,20 @@ def extract_heads_activations_from_special_tokens(activation, mapping):
     sep_activations = [activation[:, :, mapping[len(mapping) - 1], :].reshape(1,-1)]
     return cls_activations, sep_activations
 
-def extract_heads_activations_from_token_activations(activation, mapping):
+def extract_heads_activations_from_token_activations(activation, mapping, indexes):
     """Extract heads activations of each layer for each token.
     Take the average activations of the tokens related to a given word.
     activation.shape: [nb_layers, nb_heads, sequence_length, hidden_size/nb_heads]"""
     new_activations = []
-    #activation = np.swapaxes(activation.squeeze(), 0, 1) # dimension: (nb_tokens, nb_heads)
-    for word_index in range(1, len(mapping.keys()) - 1):
+    key_start = None
+    key_stop = None
+    for key_, value in mapping.items(): 
+        if (value[0] - 1)== (indexes[0]): #because we added [CLS] token at the beginning
+            key_start = key_
+    for key_, value in mapping.items(): 
+        if value[-1] == (indexes[1]): #because we added [CLS] token at the beginning
+            key_stop = key_
+    for word_index in range(key_start, key_stop + 1): # len(mapping.keys()) - 1
         word_activation = []
         word_activation.append([activation[:, :, index, :] for index in mapping[word_index]])
         word_activation = np.vstack(word_activation)

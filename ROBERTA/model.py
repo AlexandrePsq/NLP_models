@@ -21,7 +21,21 @@ from modeling_hacked_roberta import RobertaModel
 class RobertaExtractor(object):
     """Container module for RoBerta."""
 
-    def __init__(self, pretrained_roberta_model, language, name, prediction_type, output_hidden_states, output_attentions, config_path=None):
+    def __init__(
+        self, 
+        pretrained_roberta_model, 
+        language, 
+        name, 
+        prediction_type, 
+        output_hidden_states, 
+        output_attentions, 
+        config_path=None,
+        max_length=512, 
+        context_length=250, 
+        number_of_sentence=1, 
+        number_of_sentence_before=0, 
+        number_of_sentence_after=0
+        ):
         super(RobertaExtractor, self).__init__()
         # Load pre-trained model tokenizer (vocabulary)
         # Crucially, do not do basic tokenization; PTB is tokenized. Just do wordpiece tokenization.
@@ -29,11 +43,16 @@ class RobertaExtractor(object):
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_roberta_model)
         
         self.language = language
+        self.pretrained_roberta_model = pretrained_roberta_model
         self.NUM_HIDDEN_LAYERS = self.model.config.num_hidden_layers
         self.FEATURE_COUNT = self.model.config.hidden_size
         self.NUM_ATTENTION_HEADS = self.model.config.num_attention_heads
         self.name = name
-        self.config = utils.read_yaml(config_path) if config_path else {'max_length': 128}
+        self.config = utils.read_yaml(config_path) if config_path else {'max_length': max_length, 
+                                                                        'context_length': context_length,
+                                                                        'number_of_sentence': number_of_sentence,
+                                                                        'number_of_sentence_before': number_of_sentence_before,
+                                                                        'number_of_sentence_after': number_of_sentence_after}
         self.prediction_type = prediction_type # ['sentence', 'sequential']
 
     def __name__(self):
@@ -91,26 +110,19 @@ class RobertaExtractor(object):
         cls_attention_activations = []
         sep_attention_activations = []
         # Here, we give as input the text line by line.
-        for line in iterator:
-            line = line.strip() # Remove trailing characters
-            encoded_dict = self.tokenizer.encode_plus(
-                                line,                               # Sentence to encode.
-                                add_special_tokens = True,          # Add '[CLS]' and '[SEP]'
-                                max_length = self.config['max_length'],   # Pad & truncate all sentences.
-                                pad_to_max_length = True,
-                                return_attention_mask = True,       # Construct attn. masks.
-                                return_tensors = 'pt'               # Return pytorch tensors.
-                        )            
-            # retrieve model inputs
-            inputs_ids = encoded_dict['input_ids']
-            attention_mask = encoded_dict['attention_mask']
+        batches, indexes = utils.batchify_per_sentence_with_pre_and_post_context(iterator, self.config['number_of_sentence'], self.config['number_of_sentence_before'], self.config['number_of_sentence_after'], self.pretrained_roberta_model, max_length=512)
 
-            line = '<s> ' + line + ' </s>'
-            tokenized_text = self.tokenizer.tokenize(line)
-            mapping = utils.match_tokenized_to_untokenized(tokenized_text, line)
+        for index, batch in enumerate(batches):
+            batch = batch.strip() # Remove trailing character
+
+            batch = '<s> ' + batch + ' </s>'
+            tokenized_text = self.tokenizer.tokenize(batch)
+            inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
+            attention_mask = torch.tensor([[1 for x in tokenized_text]])
+            mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
 
             with torch.no_grad():
-                encoded_layers = self.model(inputs_ids, attention_mask) # last_hidden_state, pooler_output, hidden_states, attentions
+                encoded_layers = self.model(inputs_ids, attention_mask=attention_mask) # last_hidden_state, pooler_output, hidden_states, attentions
                 # last_hidden_state dimension: (batch_size, sequence_length, hidden_size)
                 # pooler_output dimension: (batch_size, hidden_size)
                 # hidden_states dimension: num_layers * (batch_size, sequence_length, hidden_size)
@@ -120,7 +132,7 @@ class RobertaExtractor(object):
                 # filtration
                 if self.model.config.output_hidden_states:
                     hidden_states_activations_ = np.vstack(encoded_layers[2]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
-                    hidden_states_activations += utils.extract_activations_from_token_activations(hidden_states_activations_, mapping)
+                    hidden_states_activations += utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes[index])
                     cls_activations_, sep_activations_ = utils.extract_activations_from_special_tokens(hidden_states_activations_, mapping)
                     cls_hidden_states_activations += cls_activations_
                     sep_hidden_states_activations += sep_activations_
@@ -130,7 +142,7 @@ class RobertaExtractor(object):
                                                                 self.config['max_length'], 
                                                                 self.NUM_ATTENTION_HEADS, 
                                                                 self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS]).permute(0, 2, 1, 3).contiguous()  for array in encoded_layers[3]])
-                    attention_heads_activations += utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping)
+                    attention_heads_activations += utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping, indexes[index])
                     cls_attention_, sep_attention_ = utils.extract_heads_activations_from_special_tokens(attention_heads_activations_, mapping)
                     cls_attention_activations += cls_attention_
                     sep_attention_activations += sep_attention_
@@ -161,32 +173,25 @@ class RobertaExtractor(object):
         cls_attention_activations = []
         sep_attention_activations = []
         # Here we give as input the sentence up to the actual word, incrementing by one at each step.
-        for line in iterator:
-            for index in range(1, len(line.split()) + 1):
-                tmp_line = " ".join(line.split()[:index])
-                tmp_line = tmp_line.strip() # Remove trailing characters
-                encoded_dict = self.tokenizer.encode_plus(
-                                    tmp_line,                           # Sentence to encode.
-                                    add_special_tokens = True,          # Add '[CLS]' and '[SEP]'
-                                    max_length = self.config['max_length'],   # Pad & truncate all sentences.
-                                    pad_to_max_length = True,
-                                    return_attention_mask = True,       # Construct attn. masks.
-                                    return_tensors = 'pt'               # Return pytorch tensors.
-                        )            
-                # retrieve model inputs
-                inputs_ids = encoded_dict['input_ids']
-                attention_mask = encoded_dict['attention_mask']
+        batches, indexes = utils.batchify_per_sentence_with_pre_and_post_context(iterator, self.config['number_of_sentence'], self.config['number_of_sentence_before'], self.config['number_of_sentence_after'], self.pretrained_roberta_model, max_length=512)
 
-                tmp_line = '<s> ' + line + ' </s>'
+        for index, batch in enumerate(batches):
+            batch = batch.strip() # Remove trailing character
+            for index_word in range(1 + indexes[index][0], len(batch.split()) + 1):
+                tmp_line = " ".join(batch.split()[:index_word])
+
+                tmp_line = '<s> ' + tmp_line + ' </s>'
                 tokenized_text = self.tokenizer.tokenize(tmp_line)
+                inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
+                attention_mask = torch.tensor([[1 for x in tokenized_text]])
                 mapping = utils.match_tokenized_to_untokenized(tokenized_text, tmp_line)
 
                 with torch.no_grad():
-                    encoded_layers = self.model(inputs_ids, attention_mask) # dimension = layer_count * len(tokenized_text) * feature_count
+                    encoded_layers = self.model(inputs_ids, attention_mask=attention_mask) # dimension = layer_count * len(tokenized_text) * feature_count
                     # filtration
                     if self.model.config.output_hidden_states:
                         hidden_states_activations_ = np.vstack(encoded_layers[2]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
-                        hidden_states_activations.append(utils.extract_activations_from_token_activations(hidden_states_activations_, mapping)[-1])
+                        hidden_states_activations.append(utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes[index])[-1])
                         cls_activations_, sep_activations_ = utils.extract_activations_from_special_tokens(hidden_states_activations_, mapping)
                         cls_hidden_states_activations += cls_activations_
                         sep_hidden_states_activations += sep_activations_
@@ -196,7 +201,7 @@ class RobertaExtractor(object):
                                                                 self.config['max_length'], 
                                                                 self.NUM_ATTENTION_HEADS, 
                                                                 self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS]).permute(0, 2, 1, 3).contiguous()  for array in encoded_layers[3]])
-                        attention_heads_activations.append(utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping)[-1])
+                        attention_heads_activations.append(utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping, indexes[index])[-1])
                         cls_attention_, sep_attention_ = utils.extract_heads_activations_from_special_tokens(attention_heads_activations_, mapping)
                         cls_attention_activations += cls_attention_
                         sep_attention_activations += sep_attention_
