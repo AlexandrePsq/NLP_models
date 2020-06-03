@@ -17,7 +17,7 @@ from collections import defaultdict
 from torch.utils.data import TensorDataset, random_split
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from transformers import WEIGHTS_NAME, CONFIG_NAME
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, RobertaTokenizer
 
 
 
@@ -201,7 +201,11 @@ def batchify_per_sentence_with_context(iterator, number_of_sentence, number_sent
             if stop==start+number_sentence_before:
                 raise ValueError('Too many context sentence. You reach {} tokens only with context.'.format(token_count))
         batch.append(' '.join(iterator[start:stop]))
-        indexes.append((len(tokenizer.tokenize(' '.join(iterator[start:start+number_sentence_before]), add_prefix_space=True)), len(tokenizer.tokenize(batch[-1], add_prefix_space=True))))
+        item = ' '.join(iterator[start:start+number_sentence_before])
+        if item=='':
+            indexes.append((0, len(tokenizer.tokenize(batch[-1], add_prefix_space=True))))
+        else:
+            indexes.append((len(tokenizer.tokenize(item, add_prefix_space=True)), len(tokenizer.tokenize(batch[-1], add_prefix_space=True))))
         sentence_count = stop
     if batch_modifications > 0:
         print('WARNING: {} reductions were done when constructing batches... You should reduce the number of sentence to include.'.format(batch_modifications))
@@ -221,7 +225,7 @@ def batchify_per_sentence_with_pre_and_post_context(iterator, number_of_sentence
     iterator = [item.strip() for item in iterator]
     max_length -= 2 # for special tokens
     assert number_of_sentence > 0
-    tokenizer = AutoTokenizer.from_pretrained(pretrained_roberta)
+    tokenizer = RobertaTokenizer.from_pretrained(pretrained_roberta)
     
     batch = []
     indexes = []
@@ -235,7 +239,11 @@ def batchify_per_sentence_with_pre_and_post_context(iterator, number_of_sentence
         if token_count > max_length:
             raise ValueError('Cannot fit context with additional sentence. You should reduce context length.')
         batch.append(' '.join(iterator[:stop]))
-        indexes.append((0, len(tokenizer.tokenize(batch[-1], add_prefix_space=True))))
+        item = batch[-1]
+        if item=='':
+            indexes.append((0, 0))
+        else:
+            indexes.append((0, len(tokenizer.tokenize(item, add_prefix_space=True))))
         sentence_count = stop
 
     while sentence_count < n:
@@ -252,7 +260,11 @@ def batchify_per_sentence_with_pre_and_post_context(iterator, number_of_sentence
             if stop==start+number_sentence_before:
                 raise ValueError('Too many context sentence. You reach {} tokens only with context.'.format(token_count))
         batch.append(' '.join(iterator[start:stop_post_context]))
-        indexes.append((len(tokenizer.tokenize(' '.join(iterator[start:start+number_sentence_before]), add_prefix_space=True)), len(tokenizer.tokenize(' '.join(iterator[start:stop]), add_prefix_space=True))))
+        item1 = ' '.join(iterator[start:start+number_sentence_before])
+        if item1=='':
+            indexes.append((0, len(tokenizer.tokenize(' '.join(iterator[start:stop]), add_prefix_space=True))))
+        else:
+            indexes.append((len(tokenizer.tokenize(item1, add_prefix_space=True)), len(tokenizer.tokenize(' '.join(iterator[start:stop]), add_prefix_space=True))))
         sentence_count = stop
     if batch_modifications > 0:
         print('WARNING: {} reductions were done when constructing batches... You should reduce the number of sentence to include.'.format(batch_modifications))
