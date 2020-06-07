@@ -110,7 +110,13 @@ class RobertaExtractor(object):
         cls_attention_activations = []
         sep_attention_activations = []
         # Here, we give as input the text line by line.
-        batches, indexes = utils.batchify_per_sentence_with_pre_and_post_context(iterator, self.config['number_of_sentence'], self.config['number_of_sentence_before'], self.config['number_of_sentence_after'], self.pretrained_roberta_model, max_length=512)
+        batches, indexes = utils.batchify_per_sentence_with_pre_and_post_context(
+            iterator, 
+            self.config['number_of_sentence'], 
+            self.config['number_of_sentence_before'], 
+            self.config['number_of_sentence_after'], 
+            self.pretrained_roberta_model, 
+            max_length=512)
 
         for index, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
