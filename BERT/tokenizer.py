@@ -29,19 +29,15 @@ def tokenize(path, language, train=False):
     Returns:
         - iterator: sentence iterator
     """
-    print('Tokenizing...')
     if os.path.exists(path):
         path = open(path, 'r', encoding='utf8').read()
 
     if not train:
-        print('Preprocessing...')
         text = preprocess(path, special_words, language)
-        print('Preprocessed.')
     else:
         text = path
     # iterator = [unk_transform(item, vocab).lower() for item in text.split()]
     iterator = [item.strip() for item in tqdm(text.split('\n')[:-1])] # vocab words not lowered
-    print('Tokenized.')
     return iterator
 
 

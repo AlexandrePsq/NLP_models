@@ -36,14 +36,11 @@ def tokenize(path, language, train=False, with_punctuation=False):
         - iterator: sentence iterator (without punctuation)
     """
     punctuation = ['\'', ',', ';', ':', '/', '-', '"', '‘', '’', '(', ')', '{', '}', '[', ']', '`', '“', '”', '—', '.', '!', '?']
-    print('Tokenizing...')
     if os.path.exists(path):
         path = open(path, 'r', encoding='utf8').read()
 
     if not train:
-        print('Preprocessing...')
         text = preprocess(path, special_words, language)
-        print('Preprocessed.')
     else:
         text = path
     iterator = [item.strip() for item in tqdm(text.split('\n')[:-1])] # vocab words not lowered
@@ -52,7 +49,6 @@ def tokenize(path, language, train=False, with_punctuation=False):
             iterator = [sentence.replace(item, '') for sentence in iterator]
     iterator = [re.sub(' +', ' ', sentence).strip() for sentence in iterator]
     iterator = [item for item in iterator if item!='']
-    print('Tokenized.')
     return iterator
 
 
