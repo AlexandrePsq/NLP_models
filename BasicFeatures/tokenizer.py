@@ -26,7 +26,7 @@ def sentence_to_words(iterator):
     return iterator
 
 
-def tokenize(path, language, train=False, with_punctuation=False):
+def tokenize(path, language, train=False, with_punctuation=False, convert_numbers=False):
     """ Tokenize a text into sentences.
     Optionnaly preprocess it.
     Arguments:
@@ -35,12 +35,12 @@ def tokenize(path, language, train=False, with_punctuation=False):
     Returns:
         - iterator: sentence iterator (without punctuation)
     """
-    punctuation = ['\'', ',', ';', ':', '/', '-', '"', '‘', '’', '(', ')', '{', '}', '[', ']', '`', '“', '”', '—', '.', '!', '?']
+    punctuation = ['\'', ',', ';', ':', '/', '-', '"', '‘', '’', '(', ')', '{', '}', '[', ']', '`', '“', '”', '—', '.', '!', '?', '«', '»']
     if os.path.exists(path):
         path = open(path, 'r', encoding='utf8').read()
 
     if not train:
-        text = preprocess(path, special_words, language)
+        text = preprocess(path, special_words, language, convert_numbers)
     else:
         text = path
     iterator = [item.strip() for item in tqdm(text.split('\n')[:-1])] # vocab words not lowered
@@ -52,7 +52,7 @@ def tokenize(path, language, train=False, with_punctuation=False):
     return iterator
 
 
-def preprocess(text, special_words, language):
+def preprocess(text, special_words, language, convert_numbers=False):
     """ Prepare text for tokenization into sentences.
     Replace words in text by the ones by which they have been replaced in the 
     textgrid files. Then replace all numbers by their written english version.
@@ -63,15 +63,20 @@ def preprocess(text, special_words, language):
         - special_words: (dict) special words and words by which to replace them
         - language: (str)
     """
-    text = text.replace('\n', '')
+    text = text.replace('\n', ' ')
     text = text.replace('<unk>', 'unk')
     for word in special_words[language].keys():
         text = text.replace(word, special_words[language][word])
-    transf = inflect.engine()
-    numbers = re.findall('\d+', text)
-    for number in numbers:
-        text = text.replace(number, transf.number_to_words(number))
-    punctuation = ['\'', ',', ';', ':', '/', '-', '"', '‘', '’', '(', ')', '{', '}', '[', ']', '`', '“', '”', '—']
+    if convert_numbers:
+        transf = inflect.engine()
+        numbers = re.findall('\d+', text)
+        for number in numbers:
+            text = text.replace(number, transf.number_to_words(number))
+    if language=='french':
+        punctuation = [',', ';', ':', '/', '-', '"', '‘', '’', '(', ')', '{', '}', '[', ']', '`', '“', '”', '—', '«', '»']
+        text = text.replace('\'', '\' ')
+    elif language=='english':
+        punctuation = ['\'', ',', ';', ':', '/', '-', '"', '‘', '’', '(', ')', '{', '}', '[', ']', '`', '“', '”', '—']
     eos_punctuation =  ['.', '!', '?']
     for item in punctuation:
         text = text.replace(item, ' '+ item + ' ')
