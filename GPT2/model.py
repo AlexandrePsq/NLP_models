@@ -87,7 +87,7 @@ class GPT2Extractor(object):
         hidden_states_activations = []
         attention_heads_activations = []
         # Here, we give as input the batch of line by batch of line.
-        batches, indexes = utils.batchify_per_sentence_with_context(iterator, self.config['number_of_sentence'], self.config['number_sentence_before'], self.pretrained_gpt2_model, max_length=self.config['max_length'])
+        batches, indexes = utils.batchify_per_sentence_with_context(iterator, self.config['number_of_sentence'], self.config['number_of_sentence_before'], self.pretrained_gpt2_model, max_length=self.config['max_length'])
         for index, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
 
@@ -109,11 +109,7 @@ class GPT2Extractor(object):
                     hidden_states_activations_ = np.vstack(encoded_layers[2]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
                     hidden_states_activations += utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes[index])
                 if self.model.config.output_attentions:
-                    attention_heads_activations_ = np.vstack([array[0].view([
-                                                                1, 
-                                                                inputs_ids.shape[-1], 
-                                                                self.NUM_ATTENTION_HEADS, 
-                                                                self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS]).permute(0, 2, 1, 3).contiguous()  for array in encoded_layers[3]])
+                    attention_heads_activations_ = np.vstack([array[0]  for array in encoded_layers[3]])
                     attention_heads_activations += utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping, indexes[index])
         if self.model.config.output_hidden_states:
             hidden_states_activations = pd.DataFrame(np.vstack(hidden_states_activations), columns=['hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
