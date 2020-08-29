@@ -42,7 +42,7 @@ class Glove(object):
     
     def update_model(self):
         self.words2add = {'hadn':(['had', 'n’t'], 1),
-                            'crossly':(['accross'], 0), 
+                            'crossly':(['across'], 0), 
                             'mustn':(['must', 'n’t'], 1)} # the second value in the tuple is the number of following words to skip in generate
         for key in self.words2add.keys():
             self.model[key] = np.zeros((300,))

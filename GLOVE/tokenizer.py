@@ -58,7 +58,7 @@ def preprocess(text, special_words, language):
         - language: (str)
     """
     text = text.replace('\n', '')
-    text = text.replace('<unk>', 'unk')
+    text = text.replace('<raw_unk>', 'raw_unk')
     for word in special_words[language].keys():
         text = text.replace(word, special_words[language][word])
     transf = inflect.engine()
@@ -90,12 +90,12 @@ def preprocess(text, special_words, language):
 
 
 def unk_transform(word, vocab=None):
-    if word == 'unk':
-        return '<unk>'
+    if word == 'raw_unk':
+        return '<raw_unk>'
     elif not vocab:
         return word
     elif word in vocab:
         return word
     else:
-        return '<unk>'
+        return '<raw_unk>'
 
