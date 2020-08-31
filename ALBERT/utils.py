@@ -14,8 +14,8 @@ from collections import defaultdict
 
 from torch.utils.data import TensorDataset, random_split
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
-from modeling_hacked_albert import AlbertConfig
-from modeling_hacked_albert import AlbertTokenizer, AlbertModel, WEIGHTS_NAME, CONFIG_NAME
+from transformers import AlbertConfig
+from transformers import AlbertTokenizer, AlbertModel, WEIGHTS_NAME, CONFIG_NAME
 
 
 
@@ -124,7 +124,7 @@ def save(model, tokenizer, output_dir, index):
     model_to_save.config.to_json_file(output_config_file)
     tokenizer.save_pretrained(output_dir)
 
-def batchify_per_sentence(iterator, tokenizer, number_of_sentence, pretrained_albert, max_length=512):
+def batchify_per_sentence(iterator, tokenizer, number_of_sentence, max_length=512):
     """Batchify iterator sentence, to get batches of specified number of sentences.
     Arguments:
         - iterator: sentence iterator
@@ -156,7 +156,7 @@ def batchify_per_sentence(iterator, tokenizer, number_of_sentence, pretrained_al
         print('WARNING: {} reductions were done when constructing batches... You should reduce the number of sentence to include.'.format(batch_modifications))
     return batch, indexes
 
-def batchify_per_sentence_with_context(iterator, tokenizer, number_of_sentence, number_sentence_before, pretrained_albert, max_length=512):
+def batchify_per_sentence_with_context(iterator, tokenizer, number_of_sentence, number_sentence_before, max_length=512):
     """Batchify iterator sentence, to get batches of specified number of sentences.
     Arguments:
         - iterator: sentence iterator
@@ -203,7 +203,7 @@ def batchify_per_sentence_with_context(iterator, tokenizer, number_of_sentence, 
         print('WARNING: {} reductions were done when constructing batches... You should reduce the number of sentence to include.'.format(batch_modifications))
     return batch, indexes
 
-def batchify_per_sentence_with_pre_and_post_context(iterator, tokenizer, number_of_sentence, number_sentence_before, number_sentence_after, pretrained_albert, max_length=512):
+def batchify_per_sentence_with_pre_and_post_context(iterator, tokenizer, number_of_sentence, number_sentence_before, number_sentence_after, max_length=512):
     """Batchify iterator sentence, to get batches of specified number of sentences.
     Arguments:
         - iterator: sentence iterator
@@ -253,7 +253,7 @@ def batchify_per_sentence_with_pre_and_post_context(iterator, tokenizer, number_
         print('WARNING: {} reductions were done when constructing batches... You should reduce the number of sentence to include.'.format(batch_modifications))
     return batch, indexes
 
-def batchify(iterator, tokenizer, context_length, pretrained_albert, max_length=512):
+def batchify(iterator, tokenizer, context_length, max_length=512):
     """Batchify iterator sentence, to get minimum context length 
     when possible.
     Arguments:
