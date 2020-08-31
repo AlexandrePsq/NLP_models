@@ -113,6 +113,7 @@ class DistilBertExtractor(object):
         # Here, we give as input the batch of line by batch of line.
         batches, indexes = utils.batchify_per_sentence_with_pre_and_post_context(
             iterator, 
+            self.tokenizer, 
             self.config['number_of_sentence'], 
             self.config['number_of_sentence_before'], 
             self.config['number_of_sentence_after'], 

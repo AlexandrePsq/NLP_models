@@ -124,7 +124,7 @@ def save(model, tokenizer, output_dir, index):
     model_to_save.config.to_json_file(output_config_file)
     tokenizer.save_pretrained(output_dir)
 
-def batchify_per_sentence(iterator, number_of_sentence, pretrained_distilbert, max_length=512):
+def batchify_per_sentence(iterator, tokenizer, number_of_sentence, pretrained_distilbert, max_length=512):
     """Batchify iterator sentence, to get batches of specified number of sentences.
     Arguments:
         - iterator: sentence iterator
@@ -135,7 +135,6 @@ def batchify_per_sentence(iterator, number_of_sentence, pretrained_distilbert, m
     """
     iterator = [item.strip() for item in iterator]
     max_length -= 2 # for special tokens
-    tokenizer = DistilBertTokenizer.from_pretrained(pretrained_distilbert)
     
     batch = []
     indexes = []
@@ -157,7 +156,7 @@ def batchify_per_sentence(iterator, number_of_sentence, pretrained_distilbert, m
         print('WARNING: {} reductions were done when constructing batches... You should reduce the number of sentence to include.'.format(batch_modifications))
     return batch, indexes
 
-def batchify_per_sentence_with_context(iterator, number_of_sentence, number_sentence_before, pretrained_distilbert, max_length=512):
+def batchify_per_sentence_with_context(iterator, tokenizer, number_of_sentence, number_sentence_before, pretrained_distilbert, max_length=512):
     """Batchify iterator sentence, to get batches of specified number of sentences.
     Arguments:
         - iterator: sentence iterator
@@ -170,7 +169,6 @@ def batchify_per_sentence_with_context(iterator, number_of_sentence, number_sent
     iterator = [item.strip() for item in iterator]
     max_length -= 2 # for special tokens
     assert number_of_sentence > 0
-    tokenizer = DistilBertTokenizer.from_pretrained(pretrained_distilbert)
     
     batch = []
     indexes = []
@@ -205,7 +203,7 @@ def batchify_per_sentence_with_context(iterator, number_of_sentence, number_sent
         print('WARNING: {} reductions were done when constructing batches... You should reduce the number of sentence to include.'.format(batch_modifications))
     return batch, indexes
 
-def batchify_per_sentence_with_pre_and_post_context(iterator, number_of_sentence, number_sentence_before, number_sentence_after, pretrained_distilbert, max_length=512):
+def batchify_per_sentence_with_pre_and_post_context(iterator, tokenizer, number_of_sentence, number_sentence_before, number_sentence_after, pretrained_distilbert, max_length=512):
     """Batchify iterator sentence, to get batches of specified number of sentences.
     Arguments:
         - iterator: sentence iterator
@@ -219,7 +217,6 @@ def batchify_per_sentence_with_pre_and_post_context(iterator, number_of_sentence
     iterator = [item.strip() for item in iterator]
     max_length -= 2 # for special tokens
     assert number_of_sentence > 0
-    tokenizer = DistilBertTokenizer.from_pretrained(pretrained_distilbert)
     
     batch = []
     indexes = []
@@ -256,7 +253,7 @@ def batchify_per_sentence_with_pre_and_post_context(iterator, number_of_sentence
         print('WARNING: {} reductions were done when constructing batches... You should reduce the number of sentence to include.'.format(batch_modifications))
     return batch, indexes
 
-def batchify(iterator, context_length, pretrained_distilbert, max_length=512):
+def batchify(iterator, tokenizer, context_length, pretrained_distilbert, max_length=512):
     """Batchify iterator sentence, to get minimum context length 
     when possible.
     Arguments:
@@ -268,7 +265,6 @@ def batchify(iterator, context_length, pretrained_distilbert, max_length=512):
     """
     iterator = [item.strip() for item in iterator]
     max_length -= 2 # for special tokens
-    tokenizer = DistilBertTokenizer.from_pretrained(pretrained_distilbert)
     
     batch = []
     indexes = []
