@@ -15,7 +15,7 @@ from collections import defaultdict
 from torch.utils.data import TensorDataset, random_split
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from transformers import DistilBertConfig
-from transformers import DistilBertTokenizer, DistilBertModel
+from transformers import DistilBertTokenizer, DistilBertModel, WEIGHTS_NAME, CONFIG_NAME
 
 
 
@@ -135,7 +135,7 @@ def batchify_per_sentence(iterator, number_of_sentence, pretrained_distilbert, m
     """
     iterator = [item.strip() for item in iterator]
     max_length -= 2 # for special tokens
-    tokenizer = BertTokenizer.from_pretrained(pretrained_distilbert)
+    tokenizer = DistilBertTokenizer.from_pretrained(pretrained_distilbert)
     
     batch = []
     indexes = []
@@ -170,7 +170,7 @@ def batchify_per_sentence_with_context(iterator, number_of_sentence, number_sent
     iterator = [item.strip() for item in iterator]
     max_length -= 2 # for special tokens
     assert number_of_sentence > 0
-    tokenizer = BertTokenizer.from_pretrained(pretrained_distilbert)
+    tokenizer = DistilBertTokenizer.from_pretrained(pretrained_distilbert)
     
     batch = []
     indexes = []
@@ -219,7 +219,7 @@ def batchify_per_sentence_with_pre_and_post_context(iterator, number_of_sentence
     iterator = [item.strip() for item in iterator]
     max_length -= 2 # for special tokens
     assert number_of_sentence > 0
-    tokenizer = BertTokenizer.from_pretrained(pretrained_distilbert)
+    tokenizer = DistilBertTokenizer.from_pretrained(pretrained_distilbert)
     
     batch = []
     indexes = []
@@ -268,7 +268,7 @@ def batchify(iterator, context_length, pretrained_distilbert, max_length=512):
     """
     iterator = [item.strip() for item in iterator]
     max_length -= 2 # for special tokens
-    tokenizer = BertTokenizer.from_pretrained(pretrained_distilbert)
+    tokenizer = DistilBertTokenizer.from_pretrained(pretrained_distilbert)
     
     batch = []
     indexes = []
