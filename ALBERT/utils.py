@@ -14,8 +14,8 @@ from collections import defaultdict
 
 from torch.utils.data import TensorDataset, random_split
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
-from transformers import AlbertConfig
-from transformers import AlbertTokenizer, AlbertModel, WEIGHTS_NAME, CONFIG_NAME
+from modeling_hacked_albert import AlbertConfig
+from modeling_hacked_albert import AlbertTokenizer, AlbertModel, WEIGHTS_NAME, CONFIG_NAME
 
 
 
