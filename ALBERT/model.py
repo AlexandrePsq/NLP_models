@@ -117,7 +117,6 @@ class AlbertExtractor(object):
             self.config['number_of_sentence'], 
             self.config['number_of_sentence_before'], 
             self.config['number_of_sentence_after'], 
-            self.pretrained_albert_model, 
             max_length=self.config['max_length'])
             
         for index, batch in enumerate(batches):
