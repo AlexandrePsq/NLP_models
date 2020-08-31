@@ -87,7 +87,12 @@ class GPT2Extractor(object):
         hidden_states_activations = []
         attention_heads_activations = []
         # Here, we give as input the batch of line by batch of line.
-        batches, indexes = utils.batchify_per_sentence_with_context(iterator, self.config['number_of_sentence'], self.config['number_of_sentence_before'], self.pretrained_gpt2_model, max_length=self.config['max_length'])
+        batches, indexes = utils.batchify_per_sentence_with_context(
+            iterator, 
+            self.config['number_of_sentence'], 
+            self.config['number_of_sentence_before'], 
+            self.pretrained_gpt2_model, 
+            max_length=self.config['max_length'])
         for index, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
 
