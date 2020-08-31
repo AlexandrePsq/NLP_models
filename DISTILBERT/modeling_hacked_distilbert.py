@@ -27,10 +27,10 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
-from .activations import gelu
-from .configuration_distilbert import DistilBertConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_utils import PreTrainedModel, prune_linear_layer
+from transformers.activations import gelu
+from transformers.configuration_distilbert import DistilBertConfig
+from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from transformers.modeling_utils import PreTrainedModel, prune_linear_layer
 
 
 logger = logging.getLogger(__name__)

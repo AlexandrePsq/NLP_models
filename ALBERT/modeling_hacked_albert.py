@@ -26,7 +26,7 @@ from transformers.configuration_albert import AlbertConfig
 from transformers.modeling_bert import ACT2FN, BertEmbeddings, BertSelfAttention, prune_linear_layer
 from transformers.modeling_utils import PreTrainedModel
 
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_callable
 
 
 logger = logging.getLogger(__name__)
