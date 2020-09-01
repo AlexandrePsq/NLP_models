@@ -223,7 +223,8 @@ class BertExtractor(object):
                         self.NUM_HIDDEN_LAYERS, 
                         len(tokenized_text), 
                         self.NUM_ATTENTION_HEADS, 
-                        self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS])   
+                        self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS])
+                    attention_heads_activations_ = np.swapaxes(attention_heads_activations_, 1, 2)
                     attention_heads_activations += utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping, indexes[index])
                     cls_attention_, sep_attention_ = utils.extract_heads_activations_from_special_tokens(attention_heads_activations_, mapping)
                     cls_attention_activations += cls_attention_
