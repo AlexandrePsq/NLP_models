@@ -89,8 +89,8 @@ class BertExtractor(object):
             sep_hidden_states_activations = activations[3] 
             cls_attention_activations = activations[4]
             sep_attention_activations = activations[5] 
-        elif self.prediction_type == 'sequential':
-            activations = self.get_sequential_activations(iterator, language)
+        elif self.prediction_type == 'token-level':
+            activations = self.get_token_level_activations(iterator, language)
             hidden_states_activations = activations[0] 
             attention_heads_activations = activations[1] 
             cls_hidden_states_activations = activations[2]
