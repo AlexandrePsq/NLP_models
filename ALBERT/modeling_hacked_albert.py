@@ -259,7 +259,8 @@ class AlbertAttention(BertSelfAttention):
         projected_context_layer = torch.einsum("bfnd,ndh->bfh", context_layer, w) + b
         projected_context_layer_dropout = self.dropout(projected_context_layer)
         layernormed_context_layer = self.LayerNorm(input_ids + projected_context_layer_dropout)
-        return (layernormed_context_layer, attention_probs) if self.output_attentions else (layernormed_context_layer,) # should add context_layer here for attention_heads analysis
+        #return (layernormed_context_layer, attention_probs) if self.output_attentions else (layernormed_context_layer,) # should add context_layer here for attention_heads analysis
+        return (layernormed_context_layer, context_layer, attention_probs) if self.output_attentions else (layernormed_context_layer,) # should add context_layer here for attention_heads analysis # original line above
 
 
 class AlbertLayer(nn.Module):
@@ -300,7 +301,8 @@ class AlbertLayerGroup(nn.Module):
             hidden_states = layer_output[0]
 
             if self.output_attentions:
-                layer_attentions = layer_attentions + (layer_output[1],)
+                #layer_attentions = layer_attentions + (layer_output[1],)
+                layer_attentions = layer_attentions + (layer_output[1:],) # original line above
 
             if self.output_hidden_states:
                 layer_hidden_states = layer_hidden_states + (hidden_states,)
@@ -346,7 +348,8 @@ class AlbertTransformer(nn.Module):
             hidden_states = layer_group_output[0]
 
             if self.output_attentions:
-                all_attentions = all_attentions + layer_group_output[-1]
+                #all_attentions = all_attentions + layer_group_output[-1]
+                all_attentions = all_attentions + layer_group_output[-1] # original line above
 
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
