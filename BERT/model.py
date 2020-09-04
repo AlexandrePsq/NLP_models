@@ -29,7 +29,8 @@ class BertExtractor(object):
         prediction_type,
         output_hidden_states, 
         output_attentions, 
-        attention_length=1,
+        attention_length_before=1,
+        attention_length_after=1,
         config_path=None, 
         max_length=512, 
         context_length=250, 
@@ -44,7 +45,8 @@ class BertExtractor(object):
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_bert_model)
         
         self.language = language
-        self.attention_length = attention_length
+        self.attention_length_before = attention_length_before
+        self.attention_length_after = attention_length_after
         self.pretrained_bert_model = pretrained_bert_model
         self.NUM_HIDDEN_LAYERS = self.model.config.num_hidden_layers
         self.FEATURE_COUNT = self.model.config.hidden_size
@@ -55,7 +57,8 @@ class BertExtractor(object):
                                                                         'number_of_sentence': number_of_sentence,
                                                                         'number_of_sentence_before': number_of_sentence_before,
                                                                         'number_of_sentence_after': number_of_sentence_after,
-                                                                        'attention_length': attention_length}
+                                                                        'attention_length_before': attention_length_before,
+                                                                        'attention_length_after': attention_length_after}
         self.prediction_type = prediction_type # ['sentence', 'sequential']
 
     def __name__(self):
@@ -198,8 +201,10 @@ class BertExtractor(object):
             inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
             inputs_ids = torch.cat(inputs_ids.size(1) * [inputs_ids])
             attention_mask =  torch.diag_embed(torch.tensor([[0 for x in tokenized_text]]))
-            for i in range(min(len(tokenized_text), self.attention_length)):
+            for i in range(min(len(tokenized_text), self.attention_length_before)):
                 attention_mask = torch.add(attention_mask, torch.diag_embed(torch.tensor([[1 for x in range(len(tokenized_text) - i)]]), offset=-i))
+            for i in range(1, min(len(tokenized_text), self.attention_length_after + 1)):
+                attention_mask = torch.add(attention_mask, torch.diag_embed(torch.tensor([[1 for x in range(len(tokenized_text) - i)]]), offset=i))
             mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
 
             with torch.no_grad():
@@ -212,13 +217,13 @@ class BertExtractor(object):
                 #                                                       (batch_size, num_heads, sequence_length, sequence_length)]
                 # filtration
                 if self.model.config.output_hidden_states:
-                    hidden_states_activations_ = np.vstack([torch.cat([encoded_layers[2][layer][i,i,:].unsqueeze(0) for i in range(len(tokenized_text))], axis=0).unsqueeze(0).detach().numpy() for layer in range(len(encoded_layers[2]))]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
+                    hidden_states_activations_ = np.vstack([torch.cat([encoded_layers[2][layer][i,i,:].unsqueeze(0) for i in range(len(tokenized_text))], dim=0).unsqueeze(0).detach().numpy() for layer in range(len(encoded_layers[2]))]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
                     hidden_states_activations += utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes[index])
                     cls_activations_, sep_activations_ = utils.extract_activations_from_special_tokens(hidden_states_activations_, mapping)
                     cls_hidden_states_activations += cls_activations_
                     sep_hidden_states_activations += sep_activations_
                 if self.model.config.output_attentions:
-                    attention_heads_activations_ = np.vstack([torch.cat([encoded_layers[-1][layer][0][i,i,:].unsqueeze(0) for i in range(len(tokenized_text))], axis=0).unsqueeze(0).detach().numpy() for layer in range(len(encoded_layers[-1]))])
+                    attention_heads_activations_ = np.vstack([torch.cat([encoded_layers[-1][layer][0][i,i,:].unsqueeze(0) for i in range(len(tokenized_text))], dim=0).unsqueeze(0).detach().numpy() for layer in range(len(encoded_layers[-1]))])
                     attention_heads_activations_ = attention_heads_activations_.reshape([
                         self.NUM_HIDDEN_LAYERS, 
                         len(tokenized_text), 
