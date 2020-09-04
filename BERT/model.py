@@ -59,7 +59,7 @@ class BertExtractor(object):
                                                                         'number_of_sentence_after': number_of_sentence_after,
                                                                         'attention_length_before': attention_length_before,
                                                                         'attention_length_after': attention_length_after}
-        self.prediction_type = prediction_type # ['sentence', 'sequential']
+        self.prediction_type = prediction_type # ['sentence', 'token-level']
 
     def __name__(self):
         """ Retrieve Bert instance name."""

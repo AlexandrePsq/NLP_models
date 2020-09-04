@@ -184,12 +184,13 @@ class MultiHeadSelfAttention(nn.Module):
         if head_mask is not None:
             weights = weights * head_mask
 
-        context = torch.matmul(weights, v)  # (bs, n_heads, q_length, dim_per_head)
-        context = unshape(context)  # (bs, q_length, dim)
+        #context = torch.matmul(weights, v)  # (bs, n_heads, q_length, dim_per_head)
+        context_layer = torch.matmul(weights, v)  # (bs, n_heads, q_length, dim_per_head) # original line above
+        context = unshape(context_layer)  # (bs, q_length, dim)
         context = self.out_lin(context)  # (bs, q_length, dim)
 
         if self.output_attentions:
-            return (context, weights)
+            return (context_layer, context, weights)
         else:
             return (context,)
 
@@ -244,7 +245,8 @@ class TransformerBlock(nn.Module):
         # Self-Attention
         sa_output = self.attention(query=x, key=x, value=x, mask=attn_mask, head_mask=head_mask)
         if self.output_attentions:
-            sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
+            # sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
+            context_layer, sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length) # original line above
         else:  # To handle these `output_attention` or `output_hidden_states` cases returning tuples
             assert type(sa_output) == tuple
             sa_output = sa_output[0]
@@ -256,7 +258,8 @@ class TransformerBlock(nn.Module):
 
         output = (ffn_output,)
         if self.output_attentions:
-            output = (sa_weights,) + output
+            #output = (sa_weights,) + output
+            output = (context_layer, sa_weights,) + output # original line above
         return output
 
 
@@ -302,9 +305,12 @@ class Transformer(nn.Module):
             hidden_state = layer_outputs[-1]
 
             if self.output_attentions:
-                assert len(layer_outputs) == 2
-                attentions = layer_outputs[0]
-                all_attentions = all_attentions + (attentions,)
+                #assert len(layer_outputs) == 2
+                #attentions = layer_outputs[0]
+                #all_attentions = all_attentions + (attentions,)
+                assert len(layer_outputs) == 3
+                attentions = layer_outputs[:-1]
+                all_attentions = all_attentions + (attentions,) # original 3 lines above
             else:
                 assert len(layer_outputs) == 1
 
