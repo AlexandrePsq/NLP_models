@@ -36,7 +36,8 @@ class BertExtractor(object):
         context_length=250, 
         number_of_sentence=1, 
         number_of_sentence_before=0, 
-        number_of_sentence_after=0
+        number_of_sentence_after=0,
+        seed=1111
         ):
         super(BertExtractor, self).__init__()
         # Load pre-trained model tokenizer (vocabulary)
@@ -53,6 +54,7 @@ class BertExtractor(object):
         self.NUM_ATTENTION_HEADS = self.model.config.num_attention_heads
         self.name = name
         self.config = utils.read_yaml(config_path) if config_path else {'max_length': max_length, 
+                                                                        'seed': seed,
                                                                         'context_length': context_length,
                                                                         'number_of_sentence': number_of_sentence,
                                                                         'number_of_sentence_before': number_of_sentence_before,
@@ -82,7 +84,7 @@ class BertExtractor(object):
             - result: pd.DataFrame containing activation (+ optionally entropy
             and surprisal)
         """
-        utils.set_seed()
+        utils.set_seed(self.config['seed'])
         self.model.eval()
         if self.prediction_type == 'sentence':
             activations = self.get_classic_activations(iterator, language)
