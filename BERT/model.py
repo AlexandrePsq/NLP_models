@@ -201,7 +201,35 @@ class BertExtractor(object):
             self.config['number_of_sentence_after'], 
             self.pretrained_bert_model, 
             max_length=self.config['max_length'])
+        
+        if self.config['number_of_sentence_before']==0:
+            batches_ref, indexes_ref = utils.batchify_per_sentence_with_pre_and_post_context(
+                                    iterator, 
+                                    1, 
+                                    2, 
+                                    0, 
+                                    self.pretrained_bert_model, 
+                                    max_length=self.config['max_length'])
+        position_ids_list = [None] * len(batches)
+        for i, b in enumerate(batches):
+            batch = '[CLS] ' + b + ' [SEP]'
+            tokenized_text = self.tokenizer.wordpiece_tokenizer.tokenize(batch)
+            input_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
+            input_shape = input_ids.size()
+            seq_length = input_shape[1]
+
+            if i==0:
+                position_ids_list[i] = torch.arange(seq_length, dtype=torch.long)
             
+            else:
+                batch_ref = '[CLS] ' + batches_ref[i-1] + ' [SEP]'
+                tokenized_text_ref = self.tokenizer.wordpiece_tokenizer.tokenize(batch_ref)
+                input_ids_ref = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text_ref)])
+                input_shape_ref = input_ids_ref.size()
+                seq_length_ref = input_shape_ref[1]
+
+                position_ids_list[i] = torch.arange(seq_length_ref, dtype=torch.long)[-seq_length:]
+
         for index, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
 
@@ -217,7 +245,7 @@ class BertExtractor(object):
             mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
 
             with torch.no_grad():
-                encoded_layers = self.model(inputs_ids, attention_mask=attention_mask) # last_hidden_state, pooler_output, hidden_states, attentions
+                encoded_layers = self.model(inputs_ids, attention_mask=attention_mask, position_ids=position_ids_list[index]) # last_hidden_state, pooler_output, hidden_states, attentions
                 # last_hidden_state dimension: (batch_size, sequence_length, hidden_size)
                 # pooler_output dimension: (batch_size, hidden_size)
                 # hidden_states dimension: num_layers * (batch_size, sequence_length, hidden_size)
