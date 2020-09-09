@@ -12,7 +12,7 @@ import os
 import torch
 import numpy as np
 import pandas as pd
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, BertConfig
 
 import utils
 from modeling_hacked_bert import BertModel
@@ -37,12 +37,19 @@ class BertExtractor(object):
         number_of_sentence=1, 
         number_of_sentence_before=0, 
         number_of_sentence_after=0,
-        seed=1111
+        seed=1111,
+        hidden_dropout_prob=0.,
+        attention_probs_dropout_prob=0.
         ):
         super(BertExtractor, self).__init__()
         # Load pre-trained model tokenizer (vocabulary)
         # Crucially, do not do basic tokenization; PTB is tokenized. Just do wordpiece tokenization.
-        self.model = BertModel.from_pretrained(pretrained_bert_model, output_hidden_states=output_hidden_states, output_attentions=output_attentions)
+        configuration = BertConfig()
+        configuration.hidden_dropout_prob = hidden_dropout_prob
+        configuration.attention_probs_dropout_prob = attention_probs_dropout_prob
+        configuration.output_hidden_states = output_hidden_states
+        configuration.output_attentions = output_attentions
+        self.model = BertModel.from_pretrained(pretrained_bert_model, config=configuration)
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_bert_model)
         
         self.language = language
