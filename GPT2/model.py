@@ -148,13 +148,18 @@ class GPT2Extractor(object):
             batch = batch.strip() # Remove trailing character
 
             tokenized_text = self.tokenizer.tokenize(batch, add_prefix_space=True)
+            mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
+            
+            size = len(tokenized_text) - indexes[index][0]
+
             inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
             inputs_ids = torch.cat(inputs_ids.size(1) * [inputs_ids])
-            attention_mask =  torch.diag_embed(torch.tensor([[0 for x in tokenized_text]]))
+            attention_mask =  torch.diag_embed(torch.tensor([0 for x in tokenized_text]))
 
             for i in range(min(len(tokenized_text), self.attention_length_before)):
-                attention_mask = torch.add(attention_mask, torch.diag_embed(torch.tensor([[1 for x in range(len(tokenized_text) - i)]]), offset=-i))
-            mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
+                attention_mask = torch.add(attention_mask, torch.diag_embed(torch.tensor([1 for x in range(len(tokenized_text) - i)]), offset=-i))
+            inputs_ids = inputs_ids[-size:, :]
+            attention_mask = attention_mask[-size:, :]
 
             with torch.no_grad():
                 encoded_layers = self.model(inputs_ids, attention_mask=attention_mask) # last_hidden_state, pooler_output, hidden_states, attentions
@@ -166,7 +171,10 @@ class GPT2Extractor(object):
                 #                                                       (batch_size, num_heads, sequence_length, sequence_length)]
                 # filtration
                 if self.model.config.output_hidden_states:
-                    hidden_states_activations_ = np.vstack([torch.cat([encoded_layers[2][layer][i,i,:].unsqueeze(0) for i in range(len(tokenized_text))], dim=0).unsqueeze(0).detach().numpy() for layer in range(len(encoded_layers[2]))]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
+                    hidden_states_activations_ = np.vstack([torch.cat([encoded_layers[2][layer][i,len(tokenized_text) - encoded_layers[2][layer].size(0) + i,:].unsqueeze(0) for i in range(encoded_layers[2][layer].size(0))], dim=0).unsqueeze(0).detach().numpy() for layer in range(len(encoded_layers[2]))])
+                    if indexes[index][0] > 0:
+                        hidden_states_activations_ = np.concatenate([np.zeros((hidden_states_activations_.shape[0], indexes[index][0] , hidden_states_activations_.shape[-1])), hidden_states_activations_], axis=1)
+                     # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
                     hidden_states_activations += utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes[index])
                 if self.model.config.output_attentions:
                     attention_heads_activations_ = np.vstack([torch.cat([encoded_layers[-1][layer][0][i,:,i,:].unsqueeze(0) for i in range(len(tokenized_text))], dim=0).unsqueeze(0).detach().numpy() for layer in range(len(encoded_layers[-1]))])
