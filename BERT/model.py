@@ -246,6 +246,8 @@ class BertExtractor(object):
                 attention_mask = torch.add(attention_mask, torch.diag_embed(torch.tensor([[1 for x in range(len(tokenized_text) - i)]]), offset=i))
             mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
 
+            attention_mask = attention_mask.squeeze(0)
+
             with torch.no_grad():
                 encoded_layers = self.model(inputs_ids, attention_mask=attention_mask, position_ids=position_ids_list[index]) # last_hidden_state, pooler_output, hidden_states, attentions
                 # last_hidden_state dimension: (batch_size, sequence_length, hidden_size)
