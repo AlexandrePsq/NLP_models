@@ -203,34 +203,32 @@ class BertExtractor(object):
             max_length=self.config['max_length'])
         
         position_ids_list = [None] * len(batches)
-        
-        if self.config['number_of_sentence_before']==0:
-            batches_ref, indexes_ref = utils.batchify_per_sentence_with_pre_and_post_context(
-                                    iterator, 
-                                    1, 
-                                    2, 
-                                    0, 
-                                    self.pretrained_bert_model, 
-                                    max_length=self.config['max_length'])
-        
-            for i, b in enumerate(batches):
-                batch = '[CLS] ' + b + ' [SEP]'
-                tokenized_text = self.tokenizer.wordpiece_tokenizer.tokenize(batch)
-                input_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
-                input_shape = input_ids.size()
-                seq_length = input_shape[1]
-
-                if i==0:
-                    position_ids_list[i] = torch.arange(seq_length, dtype=torch.long)
-                
-                else:
-                    batch_ref = '[CLS] ' + batches_ref[i-1] + ' [SEP]'
-                    tokenized_text_ref = self.tokenizer.wordpiece_tokenizer.tokenize(batch_ref)
-                    input_ids_ref = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text_ref)])
-                    input_shape_ref = input_ids_ref.size()
-                    seq_length_ref = input_shape_ref[1]
-
-                    position_ids_list[i] = torch.arange(seq_length_ref, dtype=torch.long)[-seq_length:]
+        #
+        #if self.config['number_of_sentence_before']==0:
+        #    batches_ref, indexes_ref = utils.batchify_per_sentence_with_pre_and_post_context(
+        #                            iterator, 
+        #                            1, 
+        #                            2, 
+        #                            0, 
+        #                            self.pretrained_bert_model, 
+        #                            max_length=self.config['max_length'])
+        #
+        #    for i, b in enumerate(batches):
+        #        batch = '[CLS] ' + b + ' [SEP]'
+        #        tokenized_text = self.tokenizer.wordpiece_tokenizer.tokenize(batch)
+        #        input_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
+        #        input_shape = input_ids.size()
+        #        seq_length = input_shape[1]
+        #        if i==0:
+        #            position_ids_list[i] = torch.arange(seq_length, dtype=torch.long)
+        #        
+        #        else:
+        #            batch_ref = '[CLS] ' + batches_ref[i-1] + ' [SEP]'
+        #            tokenized_text_ref = self.tokenizer.wordpiece_tokenizer.tokenize(batch_ref)
+        #            input_ids_ref = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text_ref)])
+        #            input_shape_ref = input_ids_ref.size()
+        #            seq_length_ref = input_shape_ref[1]
+        #            position_ids_list[i] = torch.arange(seq_length_ref, dtype=torch.long)[-seq_length:]        
 
         for index, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
@@ -248,6 +246,11 @@ class BertExtractor(object):
 
             attention_mask = attention_mask.squeeze(0)
 
+            size = len(tokenized_text) - indexes[index][0]
+
+            inputs_ids = inputs_ids[-size:, :]
+            attention_mask = attention_mask[-size:, :]
+
             with torch.no_grad():
                 encoded_layers = self.model(inputs_ids, attention_mask=attention_mask, position_ids=position_ids_list[index]) # last_hidden_state, pooler_output, hidden_states, attentions
                 # last_hidden_state dimension: (batch_size, sequence_length, hidden_size)
@@ -258,13 +261,17 @@ class BertExtractor(object):
                 #                                                       (batch_size, num_heads, sequence_length, sequence_length)]
                 # filtration
                 if self.model.config.output_hidden_states:
-                    hidden_states_activations_ = np.vstack([torch.cat([encoded_layers[2][layer][i,i,:].unsqueeze(0) for i in range(len(tokenized_text))], dim=0).unsqueeze(0).detach().numpy() for layer in range(len(encoded_layers[2]))]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
+                    hidden_states_activations_ = np.vstack([torch.cat([encoded_layers[2][layer][i,len(tokenized_text) - encoded_layers[2][layer].size(0) + i,:].unsqueeze(0) for i in range(encoded_layers[2][layer].size(0))], dim=0).unsqueeze(0).detach().numpy() for layer in range(len(encoded_layers[2]))]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
+                    if indexes[index][0] > 0:
+                        hidden_states_activations_ = np.concatenate([np.zeros((hidden_states_activations_.shape[0], indexes[index][0] , hidden_states_activations_.shape[-1])), hidden_states_activations_], axis=1)
                     hidden_states_activations += utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes[index])
                     #cls_activations_, sep_activations_ = utils.extract_activations_from_special_tokens(hidden_states_activations_, mapping)
                     #cls_hidden_states_activations += cls_activations_
                     #sep_hidden_states_activations += sep_activations_
                 if self.model.config.output_attentions:
-                    attention_heads_activations_ = np.vstack([torch.cat([encoded_layers[-1][layer][0][i,i,:].unsqueeze(0) for i in range(len(tokenized_text))], dim=0).unsqueeze(0).detach().numpy() for layer in range(len(encoded_layers[-1]))])
+                    attention_heads_activations_ = np.vstack([torch.cat([encoded_layers[-1][layer][0][i,len(tokenized_text) - encoded_layers[-1][layer][0].size(0) + i,:].unsqueeze(0) for i in range(encoded_layers[-1][layer][0].size(0))], dim=0).unsqueeze(0).detach().numpy() for layer in range(len(encoded_layers[-1]))])
+                    if indexes[index][0] > 0:
+                        attention_heads_activations_ = np.concatenate([np.zeros((attention_heads_activations_.shape[0], indexes[index][0] , attention_heads_activations_.shape[-1])), attention_heads_activations_], axis=1)
                     attention_heads_activations_ = attention_heads_activations_.reshape([
                         self.NUM_HIDDEN_LAYERS, 
                         len(tokenized_text), 
