@@ -73,7 +73,7 @@ class LSTMExtractor(object):
         # Start extracting activations
         out, hidden = self.model(inp, hidden)
 
-        final_iterator = iterator if self.memory_size==np.inf else batchify_text_with_memory_size(iterator, self.memory_size)
+        final_iterator = iterator if self.memory_size==np.inf else utils.batchify_text_with_memory_size(iterator, self.memory_size)
 
         for index, item in tqdm(enumerate(final_iterator)):
 
