@@ -138,6 +138,13 @@ def batchify(data, bsz, device):
     data = data.view(bsz, -1).t().contiguous()
     return data.to(device)
 
+def batchify_text_with_memory_size(iterator, memory_size):
+    final_iterator = []
+    for index, _ in enumerate(iterator):
+        start_index = max(0, index - memory_size)
+        final_iterator += [iterator[start_index:index+1]]
+    return final_iterator
+
 
 def save(model, data_name, language, path2derivatives):
     path = '_'.join([model.__name__(), data_name, language]) + '.pt'

@@ -24,13 +24,15 @@ import utils
 class LSTMExtractor(object):
     """Container module with an encoder, a recurrent module, and a decoder."""
 
-    def __init__(self, config_path, language, name='', prediction_type='sequential', output_hidden_states=False):
+    def __init__(self, config_path, language, name='', prediction_type='sequential', output_hidden_states=False, memory_size=np.inf):
         super().__init__()
         
+        assert memory_size > 0
         self.model = RNNModel.from_pretrained(config_path, output_hidden_states=output_hidden_states)
         self.tokenizer = tokenize
         
         self.language = language
+        self.memory_size = memory_size
         self.NUM_HIDDEN_LAYERS = self.model.param['nlayers']
         self.FEATURE_COUNT = self.model.param['nhid']
         self.name = self.model.__name__()
@@ -70,12 +72,22 @@ class LSTMExtractor(object):
             inp = inp.cuda()
         # Start extracting activations
         out, hidden = self.model(inp, hidden)
-        for item in tqdm(iterator):
+
+        final_iterator = iterator if self.memory_size==np.inf else batchify_text_with_memory_size(iterator, self.memory_size)
+
+        for index, item in tqdm(enumerate(final_iterator)):
+
+            if (index + 1) % self.memory_size == 0:
+                hidden = self.model.init_hidden(1)
+
             activation, surprisal, entropy, (out, hidden) = self.model.extract(item, last_item=last_item, out=out, hidden=hidden, parameters=parameters)
+
+            if ((index + 2) % self.memory_size == 0) or self.memory_size==np.inf: # +1 because we are shifted by one due to line 74 where we initialize the hidden state, +1 because we look at the next word
+                activations.append(activation)
+                surprisals.append(surprisal)
+                entropies.append(entropy)
             last_item = item
-            activations.append(activation)
-            surprisals.append(surprisal)
-            entropies.append(entropy)
+
         activations_df = pd.DataFrame(np.vstack(activations), columns=columns_activations)
         surprisals_df = pd.DataFrame(np.vstack(surprisals), columns=['surprisal'])
         entropies_df = pd.DataFrame(np.vstack(entropies), columns=['entropy'])
