@@ -82,7 +82,7 @@ class LSTMExtractor(object):
 
             activation, surprisal, entropy, (out, hidden) = self.model.extract(item, last_item=last_item, out=out, hidden=hidden, parameters=parameters)
 
-            if ((index + 2) % self.memory_size == 0) or self.memory_size==np.inf: # +1 because we are shifted by one due to line 74 where we initialize the hidden state, +1 because we look at the next word
+            if ((index + 2) % self.memory_size == 0) or self.memory_size==np.inf or (index+1)//self.memory_size==0: # +1 because we are shifted by one due to line 74 where we initialize the hidden state, +1 because we look at the next word
                 activations.append(activation)
                 surprisals.append(surprisal)
                 entropies.append(entropy)
