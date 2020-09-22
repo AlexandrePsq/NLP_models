@@ -108,6 +108,8 @@ class GPT2Extractor(object):
             stop_attention_at_sent=self.config['stop_attention_at_sent'],
             stop_attention_before_sent=self.config['stop_attention_before_sent']
             )
+        indexes_tmp = [(indexes[i][-self.config['number_of_sentence']][0], indexes[i][-1][1]) for i in range(len(indexes))]
+        indexes_tmp[0] = (indexes[0][0][0], indexes[0][-1][1])
 
         for index, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
@@ -124,7 +126,7 @@ class GPT2Extractor(object):
                     attention_mask[:, indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]-self.config['stop_attention_before_sent']:indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]] = 1
 
             mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
-            indexes_tmp = [(indexes[i][-self.config['number_of_sentence']][0], indexes[i][-1][1]) for i in range(len(indexes))]
+            
 
             with torch.no_grad():
                 encoded_layers = self.model(inputs_ids, attention_mask=attention_mask) # last_hidden_state, pooler_output, hidden_states, attentions
