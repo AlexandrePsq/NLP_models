@@ -193,7 +193,10 @@ def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence
                     res.append((beg, end))
                     beg = end
                 indexes.append(res)
-                start += stop_attention_at_sent
+                if stop_attention_before_sent > 0:
+                    start += stop_attention_at_sent - 1
+                else:
+                    start += stop_attention_at_sent
             sentence_count = stop
             
         else:
