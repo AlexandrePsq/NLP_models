@@ -99,18 +99,10 @@ class GPT2Extractor(object):
         hidden_states_activations = []
         attention_heads_activations = []
         # Here, we give as input the batch of line by batch of line.
-        batches, indexes = utils.batchify_per_sentence_with_context(
+        batches, indexes = utils.batchify_with_detailed_indexes(
             iterator, 
             self.config['number_of_sentence'], 
             self.config['number_of_sentence_before'], 
-            self.pretrained_gpt2_model, 
-            max_length=self.config['max_length'])
-
-        if self.config['stop_attention_at_sent'] is not None:
-            _, indexes_attention = utils.batchify_per_sentence_with_context(
-            iterator, 
-            self.config['stop_attention_at_sent'] + 1, 
-            self.config['number_of_sentence_before'] - 1, 
             self.pretrained_gpt2_model, 
             max_length=self.config['max_length'])
 
@@ -122,13 +114,14 @@ class GPT2Extractor(object):
             attention_mask = torch.tensor([[1 for x in tokenized_text]])
 
             if self.config['stop_attention_at_sent'] is not None:
-                attention_mask[:, :indexes_attention[index][0]] = 0
+                attention_mask[:, :indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]] = 0
                 if self.config['stop_attention_before_sent'] < 0:
-                    attention_mask[:, indexes_attention[index][0]:indexes_attention[index][0]-self.config['stop_attention_before_sent']] = 0
+                    attention_mask[:, indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]:indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]-self.config['stop_attention_before_sent']] = 0
                 elif self.config['stop_attention_before_sent'] > 0:
-                    attention_mask[:, indexes_attention[index][0]-self.config['stop_attention_before_sent']:indexes_attention[index][0]] = 1
+                    attention_mask[:, indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]-self.config['stop_attention_before_sent']:indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]] = 1
 
             mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
+            indexes = [(indexes[i][-self.config['number_of_sentence']][0], indexes[i][-1][1]) for i in range(len(indexes))]
 
             with torch.no_grad():
                 encoded_layers = self.model(inputs_ids, attention_mask=attention_mask) # last_hidden_state, pooler_output, hidden_states, attentions
@@ -159,12 +152,13 @@ class GPT2Extractor(object):
         hidden_states_activations = []
         attention_heads_activations = []
         # Here, we give as input the batch of line by batch of line.
-        batches, indexes = utils.batchify_per_sentence_with_context(
+        batches, indexes = utils.batchify_with_detailed_indexes(
             iterator, 
             self.config['number_of_sentence'], 
             self.config['number_of_sentence_before'], 
             self.pretrained_gpt2_model, 
             max_length=self.config['max_length'])
+        indexes = [(indexes[i][-self.config['number_of_sentence']][0], indexes[i][-1][1]) for i in range(len(indexes))]
             
         for index, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
