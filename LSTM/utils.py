@@ -140,9 +140,9 @@ def batchify(data, bsz, device):
 
 def batchify_text_with_memory_size(iterator, memory_size):
     final_iterator = []
-    for index, _ in enumerate(iterator):
-        start_index = max(0, index - memory_size)
-        final_iterator += [iterator[start_index:index+1]]
+    final_iterator += iterator[:memory_size-1]
+    for index, _ in enumerate(iterator[memory_size-1:]):
+        final_iterator += iterator[index:index+memory_size]
     return final_iterator
 
 
