@@ -154,7 +154,7 @@ def batchify_per_sentence(iterator, number_of_sentence, pretrained_gpt2, max_len
         print('WARNING: {} reductions were done when constructing batches... You should reduce the number of sentence to include.'.format(batch_modifications))
     return batch, indexes
 
-def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence_before, pretrained_gpt2, max_length=512):
+def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence_before, pretrained_gpt2, max_length=512, stop_attention_at_sent=None):
     """Batchify iterator sentence, to get batches of specified number of sentences.
     Arguments:
         - iterator: sentence iterator
@@ -172,23 +172,41 @@ def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence
     batch = []
     indexes = []
     sentence_count = 0
-    batch_modifications = 0
     n = len(iterator)
+    stop = 0
+
     if number_sentence_before > 0:
         start = 0
-        stop = min(number_sentence_before, n)
-        token_count = len(tokenizer.tokenize(' '.join(iterator[:stop]), add_prefix_space=True))
-        if token_count > max_length:
-            raise ValueError('Cannot fit context with additional sentence. You should reduce context length.')
-        batch.append(' '.join(iterator[:stop]))
-        beg = 0
-        res = []
-        for item in iterator[:stop]:
-            end = len(tokenizer.tokenize(item, add_prefix_space=True)) + beg
-            res.append((beg, end))
-            beg = end
-        indexes.append(res)
-        sentence_count = stop
+        if stop_attention_at_sent is not None:
+            while stop < number_sentence_before:
+                stop = min(start + stop_attention_at_sent + number_of_sentence, n)
+                token_count = len(tokenizer.tokenize(' '.join(iterator[start:stop]), add_prefix_space=True))
+                if token_count > max_length:
+                    raise ValueError('Cannot fit context with additional sentence. You should reduce context length.')
+                batch.append(' '.join(iterator[start:stop]))
+                beg = 0
+                res = []
+                for item in iterator[start:stop]:
+                    end = len(tokenizer.tokenize(item, add_prefix_space=True)) + beg
+                    res.append((beg, end))
+                    beg = end
+                indexes.append(res)
+                start = stop
+            
+        else:
+            stop = min(number_sentence_before, n)
+            token_count = len(tokenizer.tokenize(' '.join(iterator[:stop]), add_prefix_space=True))
+            if token_count > max_length:
+                raise ValueError('Cannot fit context with additional sentence. You should reduce context length.')
+            batch.append(' '.join(iterator[:stop]))
+            beg = 0
+            res = []
+            for item in iterator[:stop]:
+                end = len(tokenizer.tokenize(item, add_prefix_space=True)) + beg
+                res.append((beg, end))
+                beg = end
+            indexes.append(res)
+            sentence_count = stop
 
     while sentence_count < n:
         start = sentence_count - number_sentence_before
