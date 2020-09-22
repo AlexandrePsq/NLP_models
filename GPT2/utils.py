@@ -154,7 +154,7 @@ def batchify_per_sentence(iterator, number_of_sentence, pretrained_gpt2, max_len
         print('WARNING: {} reductions were done when constructing batches... You should reduce the number of sentence to include.'.format(batch_modifications))
     return batch, indexes
 
-def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence_before, pretrained_gpt2, max_length=512, stop_attention_at_sent=None):
+def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence_before, pretrained_gpt2, max_length=512, stop_attention_at_sent=None, stop_attention_before_sent=0):
     """Batchify iterator sentence, to get batches of specified number of sentences.
     Arguments:
         - iterator: sentence iterator
@@ -167,6 +167,8 @@ def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence
     iterator = [item.strip() for item in iterator]
     max_length -= 2 # for special tokens
     assert number_of_sentence > 0
+    if stop_attention_before_sent > 0:
+        stop_attention_at_sent += 1
     tokenizer = GPT2Tokenizer.from_pretrained(pretrained_gpt2)
     
     batch = []
@@ -191,7 +193,7 @@ def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence
                     res.append((beg, end))
                     beg = end
                 indexes.append(res)
-                start = stop_attention_at_sent
+                start += stop_attention_at_sent
             sentence_count = stop
             
         else:
