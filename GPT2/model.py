@@ -31,7 +31,9 @@ class GPT2Extractor(object):
         max_length=512, 
         context_length=250, 
         number_of_sentence=1, 
-        number_of_sentence_before=0
+        number_of_sentence_before=0,
+        stop_attention_at_sent=None,
+        stop_attention_before_sent=0
         ):
         super(GPT2Extractor, self).__init__()
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_gpt2_model)
@@ -50,7 +52,10 @@ class GPT2Extractor(object):
                                                                         'context_length': context_length,
                                                                         'number_of_sentence': number_of_sentence,
                                                                         'number_of_sentence_before': number_of_sentence_before,
-                                                                        'attention_length_before': attention_length_before}
+                                                                        'attention_length_before': attention_length_before,
+                                                                        'stop_attention_at_sent': stop_attention_at_sent, 
+                                                                        'stop_attention_before_sent': stop_attention_before_sent
+                                                                        }
         self.prediction_type = prediction_type # ['sentence', 'token-level']
 
     def __name__(self):
@@ -100,12 +105,29 @@ class GPT2Extractor(object):
             self.config['number_of_sentence_before'], 
             self.pretrained_gpt2_model, 
             max_length=self.config['max_length'])
+
+        if self.config['stop_attention_at_sent'] is not None:
+            _, indexes_attention = utils.batchify_per_sentence_with_context(
+            iterator, 
+            self.config['stop_attention_at_sent'] + 1, 
+            self.config['number_of_sentence_before'] - 1, 
+            self.pretrained_gpt2_model, 
+            max_length=self.config['max_length'])
+
         for index, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
 
             tokenized_text = self.tokenizer.tokenize(batch, add_prefix_space=True)
             inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
             attention_mask = torch.tensor([[1 for x in tokenized_text]])
+
+            if self.config['stop_attention_at_sent'] is not None:
+                attention_mask[:, :indexes_attention[index][0]] = 0
+                if self.config['stop_attention_before_sent'] < 0:
+                    attention_mask[:, indexes_attention[index][0]:indexes_attention[index][0]-self.config['stop_attention_before_sent']] = 0
+                elif self.config['stop_attention_before_sent'] > 0:
+                    attention_mask[:, indexes_attention[index][0]-self.config['stop_attention_before_sent']:indexes_attention[index][0]] = 1
+
             mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
 
             with torch.no_grad():
@@ -154,11 +176,11 @@ class GPT2Extractor(object):
 
             inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
             inputs_ids = torch.cat(inputs_ids.size(1) * [inputs_ids])
+            inputs_ids = inputs_ids[-size:, :]
             attention_mask =  torch.diag_embed(torch.tensor([0 for x in tokenized_text]))
 
             for i in range(min(len(tokenized_text), self.attention_length_before)):
                 attention_mask = torch.add(attention_mask, torch.diag_embed(torch.tensor([1 for x in range(len(tokenized_text) - i)]), offset=-i))
-            inputs_ids = inputs_ids[-size:, :]
             attention_mask = attention_mask[-size:, :]
 
             with torch.no_grad():
