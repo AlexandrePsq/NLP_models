@@ -121,7 +121,7 @@ class GPT2Extractor(object):
                     attention_mask[:, indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]-self.config['stop_attention_before_sent']:indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]] = 1
 
             mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
-            indexes = [(indexes[i][-self.config['number_of_sentence']][0], indexes[i][-1][1]) for i in range(len(indexes))]
+            indexes_tmp = [(indexes[i][-self.config['number_of_sentence']][0], indexes[i][-1][1]) for i in range(len(indexes))]
 
             with torch.no_grad():
                 encoded_layers = self.model(inputs_ids, attention_mask=attention_mask) # last_hidden_state, pooler_output, hidden_states, attentions
@@ -134,10 +134,10 @@ class GPT2Extractor(object):
                 # filtration
                 if self.model.config.output_hidden_states:
                     hidden_states_activations_ = np.vstack(encoded_layers[2]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
-                    hidden_states_activations += utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes[index])
+                    hidden_states_activations += utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes_tmp[index])
                 if self.model.config.output_attentions:
                     attention_heads_activations_ = np.vstack([array[0]  for array in encoded_layers[3]])
-                    attention_heads_activations += utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping, indexes[index])
+                    attention_heads_activations += utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping, indexes_tmp[index])
         if self.model.config.output_hidden_states:
             hidden_states_activations = pd.DataFrame(np.vstack(hidden_states_activations), columns=['hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
         if self.model.config.output_attentions:
@@ -158,7 +158,7 @@ class GPT2Extractor(object):
             self.config['number_of_sentence_before'], 
             self.pretrained_gpt2_model, 
             max_length=self.config['max_length'])
-        indexes = [(indexes[i][-self.config['number_of_sentence']][0], indexes[i][-1][1]) for i in range(len(indexes))]
+        indexes_tmp = [(indexes[i][-self.config['number_of_sentence']][0], indexes[i][-1][1]) for i in range(len(indexes))]
             
         for index, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
@@ -166,7 +166,7 @@ class GPT2Extractor(object):
             tokenized_text = self.tokenizer.tokenize(batch, add_prefix_space=True)
             mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
             
-            size = len(tokenized_text) - indexes[index][0]
+            size = len(tokenized_text) - indexes_tmp[index][0]
 
             inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
             inputs_ids = torch.cat(inputs_ids.size(1) * [inputs_ids])
@@ -188,14 +188,14 @@ class GPT2Extractor(object):
                 # filtration
                 if self.model.config.output_hidden_states:
                     hidden_states_activations_ = np.vstack([torch.cat([encoded_layers[2][layer][i,len(tokenized_text) - encoded_layers[2][layer].size(0) + i,:].unsqueeze(0) for i in range(encoded_layers[2][layer].size(0))], dim=0).unsqueeze(0).detach().numpy() for layer in range(len(encoded_layers[2]))])
-                    if indexes[index][0] > 0:
-                        hidden_states_activations_ = np.concatenate([np.zeros((hidden_states_activations_.shape[0], indexes[index][0] , hidden_states_activations_.shape[-1])), hidden_states_activations_], axis=1)
+                    if indexes_tmp[index][0] > 0:
+                        hidden_states_activations_ = np.concatenate([np.zeros((hidden_states_activations_.shape[0], indexes_tmp[index][0] , hidden_states_activations_.shape[-1])), hidden_states_activations_], axis=1)
                      # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
-                    hidden_states_activations += utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes[index])
+                    hidden_states_activations += utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes_tmp[index])
                 if self.model.config.output_attentions:
                     attention_heads_activations_ = np.vstack([torch.cat([encoded_layers[-1][layer][0][i,:,i,:].unsqueeze(0) for i in range(len(tokenized_text))], dim=0).unsqueeze(0).detach().numpy() for layer in range(len(encoded_layers[-1]))])
                     attention_heads_activations_ = np.swapaxes(attention_heads_activations_, 1, 2)
-                    attention_heads_activations += utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping, indexes[index])
+                    attention_heads_activations += utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping, indexes_tmp[index])
         if self.model.config.output_hidden_states:
             hidden_states_activations = pd.DataFrame(np.vstack(hidden_states_activations), columns=['hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
         if self.model.config.output_attentions:
