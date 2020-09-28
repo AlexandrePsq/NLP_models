@@ -33,7 +33,8 @@ class GPT2Extractor(object):
         number_of_sentence=1, 
         number_of_sentence_before=0,
         stop_attention_at_sent=None,
-        stop_attention_before_sent=0
+        stop_attention_before_sent=0,
+        add_prefix_space=False
         ):
         super(GPT2Extractor, self).__init__()
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_gpt2_model)
@@ -48,6 +49,7 @@ class GPT2Extractor(object):
         self.FEATURE_COUNT = self.model.config.hidden_size
         self.NUM_ATTENTION_HEADS = self.model.config.num_attention_heads
         self.name = name
+        self.add_prefix_space = add_prefix_space
         self.config = utils.read_yaml(config_path) if config_path else {'max_length': max_length, 
                                                                         'context_length': context_length,
                                                                         'number_of_sentence': number_of_sentence,
@@ -106,7 +108,8 @@ class GPT2Extractor(object):
             self.pretrained_gpt2_model, 
             max_length=self.config['max_length'],
             stop_attention_at_sent=self.config['stop_attention_at_sent'],
-            stop_attention_before_sent=self.config['stop_attention_before_sent']
+            stop_attention_before_sent=self.config['stop_attention_before_sent'],
+            add_prefix_space=self.add_prefix_space
             )
         indexes_tmp = [(indexes[i][-self.config['number_of_sentence']][0], indexes[i][-1][1]) for i in range(len(indexes))]
         indexes_tmp[0] = (indexes[0][0][0], indexes[0][-1][1])
@@ -114,16 +117,18 @@ class GPT2Extractor(object):
         for index, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
 
-            tokenized_text = self.tokenizer.tokenize(batch, add_prefix_space=True)
+            batch = '<|endoftext|> ' + batch + ' <|endoftext|>'
+
+            tokenized_text = self.tokenizer.tokenize(batch, add_prefix_space=self.add_prefix_space)
             inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
             attention_mask = torch.tensor([[1 for x in tokenized_text]])
 
             if (self.config['stop_attention_at_sent'] is not None) and (index > 0):
-                attention_mask[:, :indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]] = 0
+                attention_mask[:, :1 + indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]] = 0
                 if self.config['stop_attention_before_sent'] < 0:
-                    attention_mask[:, indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]:indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]-self.config['stop_attention_before_sent']] = 0
+                    attention_mask[:, 1 + indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]: 1 + indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]-self.config['stop_attention_before_sent']] = 0
                 elif self.config['stop_attention_before_sent'] > 0:
-                    attention_mask[:, indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]-self.config['stop_attention_before_sent']:indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]] = 1
+                    attention_mask[:, 1 + indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]-self.config['stop_attention_before_sent']: 1 + indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]] = 1
 
             mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
             

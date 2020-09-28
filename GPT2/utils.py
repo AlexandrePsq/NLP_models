@@ -154,7 +154,7 @@ def batchify_per_sentence(iterator, number_of_sentence, pretrained_gpt2, max_len
         print('WARNING: {} reductions were done when constructing batches... You should reduce the number of sentence to include.'.format(batch_modifications))
     return batch, indexes
 
-def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence_before, pretrained_gpt2, max_length=512, stop_attention_at_sent=None, stop_attention_before_sent=0):
+def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence_before, pretrained_gpt2, max_length=512, stop_attention_at_sent=None, stop_attention_before_sent=0, add_prefix_space=False):
     """Batchify iterator sentence, to get batches of specified number of sentences.
     Arguments:
         - iterator: sentence iterator
@@ -182,14 +182,14 @@ def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence
         if stop_attention_at_sent is not None:
             while stop < number_sentence_before:
                 stop = min(start + stop_attention_at_sent + number_of_sentence, n)
-                token_count = len(tokenizer.tokenize(' '.join(iterator[start:stop]), add_prefix_space=True))
+                token_count = len(tokenizer.tokenize(' '.join(iterator[start:stop]), add_prefix_space=add_prefix_space))
                 if token_count > max_length:
                     raise ValueError('Cannot fit context with additional sentence. You should reduce context length.')
                 batch.append(' '.join(iterator[start:stop]))
                 beg = 0
                 res = []
                 for item in iterator[start:stop]:
-                    end = len(tokenizer.tokenize(item, add_prefix_space=True)) + beg
+                    end = len(tokenizer.tokenize(item, add_prefix_space=add_prefix_space)) + beg
                     res.append((beg, end))
                     beg = end
                 indexes.append(res)
@@ -198,14 +198,14 @@ def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence
             
         else:
             stop = min(number_sentence_before, n)
-            token_count = len(tokenizer.tokenize(' '.join(iterator[:stop]), add_prefix_space=True))
+            token_count = len(tokenizer.tokenize(' '.join(iterator[:stop]), add_prefix_space=add_prefix_space))
             if token_count > max_length:
                 raise ValueError('Cannot fit context with additional sentence. You should reduce context length.')
             batch.append(' '.join(iterator[:stop]))
             beg = 0
             res = []
             for item in iterator[:stop]:
-                end = len(tokenizer.tokenize(item, add_prefix_space=True)) + beg
+                end = len(tokenizer.tokenize(item, add_prefix_space=add_prefix_space)) + beg
                 res.append((beg, end))
                 beg = end
             indexes.append(res)
@@ -214,14 +214,14 @@ def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence
     while sentence_count < n:
         start = sentence_count - number_sentence_before
         stop = min(sentence_count + number_of_sentence, n)
-        token_count = len(tokenizer.tokenize(' '.join(iterator[start:stop]), add_prefix_space=True))
+        token_count = len(tokenizer.tokenize(' '.join(iterator[start:stop]), add_prefix_space=add_prefix_space))
         if token_count > max_length:
             raise ValueError('Too many context sentence. You reach {} tokens only with context.'.format(token_count))
         batch.append(' '.join(iterator[start:stop]))
         beg = 0
         res = []
         for item in iterator[start:stop]:
-            end = len(tokenizer.tokenize(item, add_prefix_space=True)) + beg
+            end = len(tokenizer.tokenize(item, add_prefix_space=add_prefix_space)) + beg
             res.append((beg, end))
             beg = end
         indexes.append(res)
@@ -276,7 +276,7 @@ def batchify(iterator, context_length, pretrained_gpt2, max_length=512):
 #########################################
 
 
-def match_tokenized_to_untokenized(tokenized_sent, untokenized_sent, connection_character='Ġ'):
+def match_tokenized_to_untokenized(tokenized_sent, untokenized_sent, connection_character='Ġ', eos_token='<|endoftext|>'):
     '''Aligns tokenized and untokenized sentence given non-subwords "Ġ" prefixed
     Assuming that each subword token that does start a new word is prefixed
     by "Ġ", computes an alignment between the un-subword-tokenized
@@ -292,7 +292,7 @@ def match_tokenized_to_untokenized(tokenized_sent, untokenized_sent, connection_
     untokenized_sent_index = 0
     tokenized_sent_index = 0
     while (untokenized_sent_index < len(untokenized_sent) and tokenized_sent_index < len(tokenized_sent)):
-        while (tokenized_sent_index + 1  < len(tokenized_sent) and (not tokenized_sent[tokenized_sent_index + 1].startswith(connection_character))):
+        while (tokenized_sent_index + 1  < len(tokenized_sent) and (not tokenized_sent[tokenized_sent_index + 1].startswith(connection_character)) and tokenized_sent[tokenized_sent_index+1]!=eos_token):
             mapping[untokenized_sent_index].append(tokenized_sent_index)
             tokenized_sent_index += 1
         mapping[untokenized_sent_index].append(tokenized_sent_index)
@@ -305,9 +305,9 @@ def extract_activations_from_token_activations(activation, mapping, indexes):
     new_activations = []
     key = None
     for key_, value in mapping.items(): 
-        if value[0] == indexes[0]:
+        if (value[0] - 1) == indexes[0]:
             key = key_
-    for word_index in range(key, len(mapping.keys())):
+    for word_index in range(key, len(mapping.keys()) - 1):
         word_activation = []
         word_activation.append([activation[:,index, :] for index in mapping[word_index]])
         word_activation = np.vstack(word_activation)
