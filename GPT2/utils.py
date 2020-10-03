@@ -154,7 +154,7 @@ def batchify_per_sentence(iterator, number_of_sentence, pretrained_gpt2, max_len
         print('WARNING: {} reductions were done when constructing batches... You should reduce the number of sentence to include.'.format(batch_modifications))
     return batch, indexes
 
-def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence_before, pretrained_gpt2, max_length=512, stop_attention_at_sent=None, stop_attention_before_sent=0, add_prefix_space=False):
+def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence_before, pretrained_gpt2, max_length=512, stop_attention_at_sent=None, stop_attention_before_sent=0, add_prefix_space=True):
     """Batchify iterator sentence, to get batches of specified number of sentences.
     Arguments:
         - iterator: sentence iterator
@@ -165,7 +165,7 @@ def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence
         - indexes: tuple of int
     """
     iterator = [item.strip() for item in iterator]
-    max_length -= 2 # for special tokens
+    max_length -= 3 # for special tokens, because there is a G (dot) before last special token
     assert number_of_sentence > 0
     if stop_attention_before_sent > 0:
         stop_attention_at_sent += 1
@@ -305,13 +305,15 @@ def extract_activations_from_token_activations(activation, mapping, indexes):
     new_activations = []
     key = None
     for key_, value in mapping.items(): 
-        if (value[0] - 1) == indexes[0]:
-            key = key_
-    for word_index in range(key, len(mapping.keys()) - 1):
+        if (indexes[0] + 1) in value:
+            key = key_ 
+    for word_index in range(key, len(mapping.keys()) - 2):
         word_activation = []
         word_activation.append([activation[:,index, :] for index in mapping[word_index]])
         word_activation = np.vstack(word_activation)
         new_activations.append(np.mean(word_activation, axis=0).reshape(1,-1))
+    #print(' '.join([tokenizer.decode(tokenizer.convert_tokens_to_ids([tokenized_text[word] for word in mapping[index]])) for index in range(key, len(mapping.keys()) - 2)]))
+
     return new_activations
 
 def extract_heads_activations_from_token_activations(activation, mapping, indexes):
@@ -321,9 +323,9 @@ def extract_heads_activations_from_token_activations(activation, mapping, indexe
     new_activations = []
     key = None
     for key_, value in mapping.items(): 
-        if value[0] == indexes[0]:
+        if (indexes[0] + 1) in value:
             key = key_
-    for word_index in range(key, len(mapping.keys())):
+    for word_index in range(key, len(mapping.keys()) - 2):
         word_activation = []
         word_activation.append([activation[:, :, index, :] for index in mapping[word_index]])
         word_activation = np.vstack(word_activation)

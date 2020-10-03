@@ -34,7 +34,7 @@ class GPT2Extractor(object):
         number_of_sentence_before=0,
         stop_attention_at_sent=None,
         stop_attention_before_sent=0,
-        add_prefix_space=False
+        add_prefix_space=True
         ):
         super(GPT2Extractor, self).__init__()
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_gpt2_model)
@@ -119,7 +119,7 @@ class GPT2Extractor(object):
 
             batch = '<|endoftext|> ' + batch + ' <|endoftext|>'
 
-            tokenized_text = self.tokenizer.tokenize(batch, add_prefix_space=self.add_prefix_space)
+            tokenized_text = self.tokenizer.tokenize(batch, add_prefix_space=False)
             inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
             attention_mask = torch.tensor([[1 for x in tokenized_text]])
 
@@ -131,7 +131,6 @@ class GPT2Extractor(object):
                     attention_mask[:, 1 + indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]-self.config['stop_attention_before_sent']: 1 + indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]] = 1
 
             mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
-            
 
             with torch.no_grad():
                 encoded_layers = self.model(inputs_ids, attention_mask=attention_mask) # last_hidden_state, pooler_output, hidden_states, attentions
@@ -167,13 +166,17 @@ class GPT2Extractor(object):
             self.config['number_of_sentence'], 
             self.config['number_of_sentence_before'], 
             self.pretrained_gpt2_model, 
-            max_length=self.config['max_length'])
+            max_length=self.config['max_length'],
+            add_prefix_space=self.add_prefix_space
+        )
         indexes_tmp = [(indexes[i][-self.config['number_of_sentence']][0], indexes[i][-1][1]) for i in range(len(indexes))]
+        indexes_tmp[0] = (indexes[0][0][0], indexes[0][-1][1])
             
         for index, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
+            batch = '<|endoftext|> ' + batch + ' <|endoftext|>'
 
-            tokenized_text = self.tokenizer.tokenize(batch, add_prefix_space=True)
+            tokenized_text = self.tokenizer.tokenize(batch, add_prefix_space=False)
             mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
             
             size = len(tokenized_text) - indexes_tmp[index][0]
