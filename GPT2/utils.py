@@ -271,6 +271,41 @@ def batchify(iterator, context_length, pretrained_gpt2, max_length=512):
         indexes.append((len(tokenizer.tokenize(' '.join(iterator[sentence_index+1:tmp]), add_prefix_space=True)), len(tokenizer.tokenize(batch[-1], add_prefix_space=True))))
     return batch, indexes
 
+def batchify_text_with_memory_size(iterator, tokenizer, memory_size, bos='<|endoftext|>', eos='<|endoftext|>'):
+    """Create batch of identical size of truncated input with given size in number of words.
+    Arguments:
+        - iterator: sentence iterator
+        - tokenizer: tokenizer instance
+        - memory_size: int
+    Returns:
+        - final_iterator: list of arrays of int
+        - final_mappings: array of dict
+    """
+    iterator = (' '.join(iterator)).split()
+    iterator_tmp = []
+    iterator_tmp.append([bos] + iterator[:memory_size] + [eos])
+    for index, _ in enumerate(iterator[memory_size:]):
+        iterator_tmp.append([bos] + iterator[1 + index:1 + index+memory_size] + [eos])
+    mapping_tmp = [utils.match_tokenized_to_untokenized(tokenizer.tokenize(' '.join(sent), add_prefix_space=False), ' '.join(sent)) for sent in iterator_tmp]
+    tokenized_inputs = [tokenizer.convert_tokens_to_ids(tokenizer.tokenize(' '.join(sent), add_prefix_space=False)) for sent in iterator_tmp]
+    final_iterator = [np.array(tokenized_inputs[0:1])]
+    final_mappings = [np.array(mapping_tmp[0:1])]
+    size = len(tokenized_inputs[1])
+    start = 1
+    stop = 2
+    while stop < len(tokenized_inputs):
+        if len(tokenized_inputs[stop])!=size:
+            final_iterator.append(np.array(tokenized_inputs[start:stop]))
+            final_mappings.append(np.array(mapping_tmp[start:stop]))
+            start = stop
+            size = len(tokenized_inputs[stop])
+        stop += 1
+    if (stop-start) > 1:
+        final_iterator.append(np.array(tokenized_inputs[start:stop]))
+        final_mappings.append(np.array(mapping_tmp[start:stop]))
+    
+    return final_iterator, final_mappings
+
 #########################################
 ###### Activations related functions ####
 #########################################

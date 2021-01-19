@@ -120,24 +120,78 @@ class BertExtractor(object):
         self.model.eval()
         if self.prediction_type in ['sentence', 'token-level']:
             activations = self.get_classic_activations(iterator, language)
-            hidden_states_activations = activations[0] 
-            attention_heads_activations = activations[1] 
-            cls_hidden_states_activations = activations[2]
-            sep_hidden_states_activations = activations[3] 
-            cls_attention_activations = activations[4]
-            sep_attention_activations = activations[5] 
+            
         elif 'control-context' in self.prediction_type:
             activations = self.get_token_level_activations(iterator, language)
-            hidden_states_activations = activations[0] 
-            attention_heads_activations = activations[1] 
-            cls_hidden_states_activations = activations[2]
-            sep_hidden_states_activations = activations[3] 
-            cls_attention_activations = activations[4]
-            sep_attention_activations = activations[5] 
+        
+        elif 'truncated' in self.prediction_type:
+            activations = self.get_token_level_activations(iterator, language)
+
+        hidden_states_activations = activations[0] 
+        attention_heads_activations = activations[1] 
+        cls_hidden_states_activations = activations[2]
+        sep_hidden_states_activations = activations[3] 
+        cls_attention_activations = activations[4]
+        sep_attention_activations = activations[5] 
+
         return [hidden_states_activations, 
                 attention_heads_activations, 
                 (cls_hidden_states_activations, cls_attention_activations),
                 (sep_hidden_states_activations, sep_attention_activations)]
+    
+    def get_truncated_activations(self, iterator, language):
+        """ Extract hidden state activations of the model for each token from the input, based on truncated input.
+        Arguments: 
+            - iterator: iterator object
+        Returns:
+            - result: pd.DataFrame containing activation (+ optionally entropy
+            and surprisal)
+        """
+        hidden_states_activations = []
+        attention_heads_activations = []
+        cls_hidden_states_activations = []
+        sep_hidden_states_activations = []
+        cls_attention_activations = []
+        sep_attention_activations = []
+        # Here, we give as input the batch of line by batch of line.
+        batches, mappings = utils.batchify_text_with_memory_size(iterator, self.tokenizer, self.attention_length_before, bos='[CLS]', eos='[SEP]')
+
+        for index, batch in enumerate(batches):
+
+            inputs_ids = torch.tensor(batch)
+   
+            with torch.no_grad():
+                encoded_layers = self.model(inputs_ids) # last_hidden_state, pooler_output, hidden_states, attentions
+                # last_hidden_state dimension: (batch_size, sequence_length, hidden_size)
+                # pooler_output dimension: (batch_size, hidden_size)
+                # hidden_states dimension: num_layers * (batch_size, sequence_length, hidden_size)
+                # attentions dimension: num_layers * (batch_size, num_heads, sequence_length, sequence_length)
+                # hacked version: attentions dimension: num_layers * [(batch_size, sequence_length, hidden_size), 
+                #                                                       (batch_size, num_heads, sequence_length, sequence_length)]
+                # filtration
+                if self.model.config.output_hidden_states:
+                    hidden_states_activations_ = np.stack(encoded_layers[2], axis=0) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
+                    hidden_states_activations_tmp = []
+                    for mapping_index, mapping in enumerate(mappings[index]):
+                        if index==0:
+                            word_indexes = list(mapping.keys())[1:-1] 
+                        else:
+                            word_indexes = [list(mapping.keys())[-2]] 
+                        for word_index in word_indexes:
+                            hidden_states_activations_tmp.append(np.mean(np.array([hidden_states_activations_[:, mapping_index, i, :] for i in mapping[word_index]]), axis=0).reshape(1, -1))
+                    hidden_states_activations += hidden_states_activations_tmp
+                if self.model.config.output_attentions:
+                    raise NotImplementedError('Not yet implemented...')
+        if self.model.config.output_hidden_states:
+            hidden_states_activations = pd.DataFrame(np.vstack(hidden_states_activations), columns=['hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
+        if self.model.config.output_attentions:
+            raise NotImplementedError('Not yet implemented...')
+        return [hidden_states_activations, 
+                attention_heads_activations, 
+                cls_hidden_states_activations,
+                sep_hidden_states_activations,
+                cls_attention_activations,
+                sep_attention_activations]
     
     def get_classic_activations(self, iterator, language):
         """ Extract hidden state activations of the model for each token from the input, on a 
