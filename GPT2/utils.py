@@ -305,7 +305,7 @@ def extract_activations_from_token_activations(activation, mapping, indexes):
     new_activations = []
     key = None
     for key_, value in mapping.items(): 
-        if (indexes[0] + 1) in value:
+        if indexes[0] in value:
             key = key_ 
     for word_index in range(key, len(mapping.keys()) - 2):
         word_activation = []
@@ -323,7 +323,7 @@ def extract_heads_activations_from_token_activations(activation, mapping, indexe
     new_activations = []
     key = None
     for key_, value in mapping.items(): 
-        if (indexes[0] + 1) in value:
+        if indexes[0] in value:
             key = key_
     for word_index in range(key, len(mapping.keys()) - 2):
         word_activation = []

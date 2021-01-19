@@ -131,11 +131,10 @@ class RNNModel(nn.Module):
     def save(self, path):
         torch.save(self.state_dict(), path)
     
-    def extract(self, item, last_item, out=None, hidden=None, parameters=['hidden']):
+    def extract(self, item, out=None, hidden=None, parameters=['hidden']):
         """ Extract activations/surprisal/entropy for the processing of a given word.
         Arguments:
             - item: string (current real word)
-            - last_item: string (last real word)
             - out: torch.Variable (last predicted output vector)
             - hidden: torch.Variable (last hidden state vector)
             - parameters: list (of string representing gate names)

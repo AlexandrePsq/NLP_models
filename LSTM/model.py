@@ -64,29 +64,26 @@ class LSTMExtractor(object):
         surprisals = []
         entropies = []
         # Initialiazing variables
-        last_item = self.config['eos_separator']
         out = None
-        hidden = self.model.init_hidden(1)
-        inp = torch.autograd.Variable(torch.LongTensor([[self.model.vocab.word2idx[self.config['eos_separator']]]]))
-        if self.config['cuda']:
-            inp = inp.cuda()
-        # Start extracting activations
-        out, hidden = self.model(inp, hidden)
-
+        
         final_iterator = iterator if self.memory_size==np.inf else utils.batchify_text_with_memory_size(iterator, self.memory_size)
 
         for index, item in tqdm(enumerate(final_iterator)):
 
-            if (index + 1) % self.memory_size == 0:
+            if index % self.memory_size == 0:
                 hidden = self.model.init_hidden(1)
+                inp = torch.autograd.Variable(torch.LongTensor([[self.model.vocab.word2idx[self.config['eos_separator']]]]))
+                if self.config['cuda']:
+                    inp = inp.cuda()
+                # Start extracting activations
+                out, hidden = self.model(inp, hidden)
 
-            activation, surprisal, entropy, (out, hidden) = self.model.extract(item, last_item=last_item, out=out, hidden=hidden, parameters=parameters)
+            activation, surprisal, entropy, (out, hidden) = self.model.extract(item, out=out, hidden=hidden, parameters=parameters)
 
-            if ((index + 2) % self.memory_size == 0) or self.memory_size==np.inf or (index+1)//self.memory_size==0: # +1 because we are shifted by one due to line 74 where we initialize the hidden state, +1 because we look at the next word
+            if ((index + 1) % self.memory_size == 0) or (self.memory_size==np.inf) or (index < self.memory_size): # +1 because we look if the hidden state is reset at the next word
                 activations.append(activation)
                 surprisals.append(surprisal)
                 entropies.append(entropy)
-            last_item = item
 
         activations_df = pd.DataFrame(np.vstack(activations), columns=columns_activations)
         surprisals_df = pd.DataFrame(np.vstack(surprisals), columns=['surprisal'])

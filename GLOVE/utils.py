@@ -135,6 +135,6 @@ def embeddings(model, iterator, embedding_size):
     activations = []
     for item in tqdm(iterator):
         if item not in model.keys():
-            item = '<raw_unk>'
+            item = '<unk>'
         activations.append(model[item])
     return pd.DataFrame(np.vstack(activations), columns=columns_activations)

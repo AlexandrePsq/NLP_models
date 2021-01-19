@@ -48,9 +48,10 @@ class Glove(object):
             self.model[key] = np.zeros((300,))
             for word in self.words2add[key][0]:
                 self.model[key] += self.model[word]
+            self.model[key] = self.model[key] / len(self.words2add[key][0])
 
     def __name__(self):
-        """ Define the name of the instance of RNNModel using
+        """ Define the name of the instance of Glove using
         its arguments.
         """
         return '_'.join([self.param['model_type'], 'embedding-size', str(self.param['embedding_size']), 'language', self.param['language']])

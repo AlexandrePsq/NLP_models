@@ -40,7 +40,7 @@ def tokenize(path, language, train=False, vocab=None):
     else:
         text = path
     # iterator = [unk_transform(item, vocab).lower() for item in text.split()]
-    iterator_ = [item for item in tqdm(text.split('\n')[:-1])] # vocab words not lowered
+    iterator_ = [item.lower() for item in tqdm(text.split('\n')[:-1])] # vocab words lowered
     iterator = [unk_transform(word, vocab) for item in tqdm(iterator_) for word in item.strip().split(' ')]
     print('Tokenized.')
     return iterator
@@ -58,7 +58,7 @@ def preprocess(text, special_words, language):
         - language: (str)
     """
     text = text.replace('\n', '')
-    text = text.replace('<raw_unk>', 'raw_unk')
+    text = text.replace('<unk>', 'unk')
     for word in special_words[language].keys():
         text = text.replace(word, special_words[language][word])
     transf = inflect.engine()
@@ -90,12 +90,13 @@ def preprocess(text, special_words, language):
 
 
 def unk_transform(word, vocab=None):
-    if word == 'raw_unk':
-        return '<raw_unk>'
+    if word == 'unk':
+        return '<unk>'
     elif not vocab:
         return word
     elif word in vocab:
         return word
     else:
-        return '<raw_unk>'
+        print(word)
+        return '<unk>'
 

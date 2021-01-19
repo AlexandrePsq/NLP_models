@@ -452,14 +452,19 @@ class GPT2Model(GPT2PreTrainedModel):
 
         # Attention mask.
         if attention_mask is not None:
-            assert batch_size > 0, "batch_size has to be defined and > 0"
-            attention_mask = attention_mask.view(batch_size, -1)
-            # We create a 3D attention mask from a 2D tensor mask.
-            # Sizes are [batch_size, 1, 1, to_seq_length]
-            # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
-            # this attention mask is more simple than the triangular masking of causal attention
-            # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-            attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
+            assert batch_size > 0, "batch_size has to be defined and > 0"  ### here under 
+            if len(attention_mask.size()) == 3 :
+                # Sizes are [batch_size, from_seq_length, to_seq_length]
+                attention_mask = attention_mask.unsqueeze(1) 
+                # Sizes are [batch_size, 1, from_seq_length, to_seq_length]
+            elif len(attention_mask.size()) < 3 :
+                attention_mask = attention_mask.view(batch_size, -1)
+                # We create a 3D attention mask from a 2D tensor mask.
+                # Sizes are [batch_size, 1, 1, to_seq_length]
+                # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
+                # this attention mask is more simple than the triangular masking of causal attention
+                # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
+                attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
 
             # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
             # masked positions, this operation will create a tensor which is 0.0 for
@@ -467,7 +472,7 @@ class GPT2Model(GPT2PreTrainedModel):
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
             attention_mask = attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
-            attention_mask = (1.0 - attention_mask) * -10000.0
+            attention_mask = (1.0 - attention_mask) * -10000.0     ### here above
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
