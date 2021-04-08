@@ -286,7 +286,7 @@ def batchify_text_with_memory_size(iterator, tokenizer, memory_size, bos='<|endo
     iterator_tmp.append([bos] + iterator[:memory_size] + [eos])
     for index, _ in enumerate(iterator[memory_size:]):
         iterator_tmp.append([bos] + iterator[1 + index:1 + index+memory_size] + [eos])
-    mapping_tmp = [utils.match_tokenized_to_untokenized(tokenizer.tokenize(' '.join(sent), add_prefix_space=False), ' '.join(sent)) for sent in iterator_tmp]
+    mapping_tmp = [match_tokenized_to_untokenized(tokenizer.tokenize(' '.join(sent), add_prefix_space=False), ' '.join(sent)) for sent in iterator_tmp]
     tokenized_inputs = [tokenizer.convert_tokens_to_ids(tokenizer.tokenize(' '.join(sent), add_prefix_space=False)) for sent in iterator_tmp]
     final_iterator = [np.array(tokenized_inputs[0:1])]
     final_mappings = [np.array(mapping_tmp[0:1])]

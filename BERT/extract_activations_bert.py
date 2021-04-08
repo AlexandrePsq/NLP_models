@@ -57,7 +57,7 @@ iterator_list = [tokenize(path, language, train=False) for path in paths]
 iterator_list = [[sent.lower() for sent in text] for text in iterator_list]
 
 if __name__=='__main__':
-    parser = argparse.ArgumentParser(description='Extract GPT2 activations')
+    parser = argparse.ArgumentParser(description='Extract BERT activations')
     parser.add_argument("--model", type=str)
     parser.add_argument("--name", type=str)
     parser.add_argument("--config_path", type=str)
