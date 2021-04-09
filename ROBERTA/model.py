@@ -81,11 +81,6 @@ class RobertaExtractor(object):
                         'intermediate_size': self.model.config.intermediate_size,
                         'attention_probs_dropout_prob': self.model.config.attention_probs_dropout_prob
                                                                        }
-        self.config = utils.read_yaml(config_path) if config_path else {'max_length': max_length, 
-                                                                        'context_length': context_length,
-                                                                        'number_of_sentence': number_of_sentence,
-                                                                        'number_of_sentence_before': number_of_sentence_before,
-                                                                        'number_of_sentence_after': number_of_sentence_after}
         self.prediction_type = prediction_type # ['sentence', 'sequential']
 
     def __name__(self):

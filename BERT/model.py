@@ -46,15 +46,15 @@ class BertExtractor(object):
         super(BertExtractor, self).__init__()
         # Load pre-trained model tokenizer (vocabulary)
         # Crucially, do not do basic tokenization; PTB is tokenized. Just do wordpiece tokenization.
-        if config_path is not None:
-            configuration = BertConfig(config_path)
-        else:
+        if config_path is None:
             configuration = BertConfig()
             configuration.hidden_dropout_prob = hidden_dropout_prob
             configuration.attention_probs_dropout_prob = attention_probs_dropout_prob
             configuration.output_hidden_states = output_hidden_states
             configuration.output_attentions = output_attentions
-        self.model = BertModel.from_pretrained(pretrained_bert_model, config=configuration) #, config=configuration
+            self.model = BertModel.from_pretrained(pretrained_bert_model, config=configuration) #, config=configuration
+        else:
+            self.model = BertModel.from_pretrained(pretrained_bert_model) #, config=configuration
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_bert_model)
         
         self.language = language
