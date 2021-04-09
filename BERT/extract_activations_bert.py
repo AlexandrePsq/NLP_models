@@ -105,7 +105,7 @@ if __name__=='__main__':
         print(extractor.name, ' - Extracting activations ...')
         for run_index, iterator in tqdm(enumerate(iterator_list)):
             gc.collect()
-            print("############# Run {} #############".format(run_index))
+            print("############# Run {} #############".format(run_index + 1))
             activations  = extractor.extract_activations(iterator, language)
             hidden_states_activations = activations[0]
             attention_heads_activations = activations[1]

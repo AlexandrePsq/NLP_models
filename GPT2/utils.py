@@ -342,12 +342,12 @@ def extract_activations_from_token_activations(activation, mapping, indexes):
     for key_, value in mapping.items(): 
         if indexes[0] in value:
             key = key_ 
-    for word_index in range(key, len(mapping.keys()) - 2):
+    for word_index in range(key, len(mapping.keys()) - 1):
         word_activation = []
         word_activation.append([activation[:,index, :] for index in mapping[word_index]])
         word_activation = np.vstack(word_activation)
         new_activations.append(np.mean(word_activation, axis=0).reshape(1,-1))
-    #print(' '.join([tokenizer.decode(tokenizer.convert_tokens_to_ids([tokenized_text[word] for word in mapping[index]])) for index in range(key, len(mapping.keys()) - 2)]))
+    #print(' '.join([tokenizer.decode(tokenizer.convert_tokens_to_ids([tokenized_text[word] for word in mapping[index]])) for index in range(key, len(mapping.keys()) - 1)]))
 
     return new_activations
 
