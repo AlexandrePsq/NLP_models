@@ -395,7 +395,7 @@ def extract_activations_from_token_activations(activation, mapping, indexes):
     key_start = None
     key_stop = None
     for key_, value in mapping.items(): 
-        if (value[0] - 1)== (indexes[0]): #because we added [CLS] token at the beginning
+        if (value[0] - 1) == (indexes[0]): #because we added [CLS] token at the beginning
             key_start = key_
     for key_, value in mapping.items(): 
         if value[-1] == (indexes[1]): #because we added [CLS] token at the beginning

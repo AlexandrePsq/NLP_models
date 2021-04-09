@@ -46,15 +46,15 @@ class BertExtractor(object):
         super(BertExtractor, self).__init__()
         # Load pre-trained model tokenizer (vocabulary)
         # Crucially, do not do basic tokenization; PTB is tokenized. Just do wordpiece tokenization.
-        #if config_path is not None:
-        #    configuration = BertConfig(config_path)
-        #else:
-        #    configuration = BertConfig()
-        #    configuration.hidden_dropout_prob = hidden_dropout_prob
-        #    configuration.attention_probs_dropout_prob = attention_probs_dropout_prob
-        #    configuration.output_hidden_states = output_hidden_states
-        #    configuration.output_attentions = output_attentions
-        self.model = BertModel.from_pretrained(pretrained_bert_model) #, config=configuration
+        if config_path is not None:
+            configuration = BertConfig(config_path)
+        else:
+            configuration = BertConfig()
+            configuration.hidden_dropout_prob = hidden_dropout_prob
+            configuration.attention_probs_dropout_prob = attention_probs_dropout_prob
+            configuration.output_hidden_states = output_hidden_states
+            configuration.output_attentions = output_attentions
+        self.model = BertModel.from_pretrained(pretrained_bert_model, config=configuration) #, config=configuration
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_bert_model)
         
         self.language = language
@@ -280,7 +280,6 @@ class BertExtractor(object):
 
                 attention_mask = attention_mask.unsqueeze(0)
             
-
             with torch.no_grad():
                 encoded_layers = self.model(inputs_ids, attention_mask=attention_mask) # last_hidden_state, pooler_output, hidden_states, attentions
                 # last_hidden_state dimension: (batch_size, sequence_length, hidden_size)
@@ -297,30 +296,31 @@ class BertExtractor(object):
                     #cls_hidden_states_activations += cls_activations_
                     #sep_hidden_states_activations += sep_activations_
                 if self.model.config.output_attentions:
-                    attention_heads_activations_ = np.vstack([array[0].view([
-                                                                1, 
-                                                                inputs_ids.shape[-1], 
-                                                                self.NUM_ATTENTION_HEADS, 
-                                                                self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS]).permute(0, 2, 1, 3).contiguous()  for array in encoded_layers[3]])
-                    attention_heads_activations += utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping, indexes_tmp[index])
-                    #cls_attention_, sep_attention_ = utils.extract_heads_activations_from_special_tokens(attention_heads_activations_, mapping)
-                    #cls_attention_activations += cls_attention_
-                    #sep_attention_activations += sep_attention_
+                    raise NotImplementedError('Not yet implemented...')
+                    #attention_heads_activations_ = np.vstack([array[0].view([
+                    #                                            1, 
+                    #                                            inputs_ids.shape[-1], 
+                    #                                            self.NUM_ATTENTION_HEADS, 
+                    #                                            self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS]).permute(0, 2, 1, 3).contiguous()  for array in encoded_layers[3]])
+                    #attention_heads_activations += utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping, indexes_tmp[index])
+                    ##cls_attention_, sep_attention_ = utils.extract_heads_activations_from_special_tokens(attention_heads_activations_, mapping)
+                    ##cls_attention_activations += cls_attention_
+                    ##sep_attention_activations += sep_attention_
         if self.model.config.output_hidden_states:
             hidden_states_activations = pd.DataFrame(np.vstack(hidden_states_activations), columns=['hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
             #cls_hidden_states_activations = pd.DataFrame(np.vstack(cls_hidden_states_activations), columns=['CLS-hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
             #sep_hidden_states_activations = pd.DataFrame(np.vstack(sep_hidden_states_activations), columns=['SEP-hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
         if self.model.config.output_attentions:
-            attention_heads_activations = pd.DataFrame(np.vstack(attention_heads_activations), columns=['attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in np.arange(1, 1 + self.NUM_HIDDEN_LAYERS) for head in range(1, 1 + self.NUM_ATTENTION_HEADS) for index in range(1, 1 + self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
-            #cls_attention_activations = pd.DataFrame(np.vstack(cls_attention_activations), columns=['CLS-attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in np.arange(1, 1 + self.NUM_HIDDEN_LAYERS) for head in range(1, 1 + self.NUM_ATTENTION_HEADS) for index in range(1, 1 + self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
-            #sep_attention_activations = pd.DataFrame(np.vstack(sep_attention_activations), columns=['SEP-attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in np.arange(1, 1 + self.NUM_HIDDEN_LAYERS) for head in range(1, 1 + self.NUM_ATTENTION_HEADS) for index in range(1, 1 + self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
+            raise NotImplementedError('Not yet implemented...')
+            #attention_heads_activations = pd.DataFrame(np.vstack(attention_heads_activations), columns=['attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in np.arange(1, 1 + self.NUM_HIDDEN_LAYERS) for head in range(1, 1 + self.NUM_ATTENTION_HEADS) for index in range(1, 1 + self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
+            ##cls_attention_activations = pd.DataFrame(np.vstack(cls_attention_activations), columns=['CLS-attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in np.arange(1, 1 + self.NUM_HIDDEN_LAYERS) for head in range(1, 1 + self.NUM_ATTENTION_HEADS) for index in range(1, 1 + self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
+            ##sep_attention_activations = pd.DataFrame(np.vstack(sep_attention_activations), columns=['SEP-attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in np.arange(1, 1 + self.NUM_HIDDEN_LAYERS) for head in range(1, 1 + self.NUM_ATTENTION_HEADS) for index in range(1, 1 + self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
         return [hidden_states_activations, 
                 attention_heads_activations, 
                 cls_hidden_states_activations,
                 sep_hidden_states_activations,
                 cls_attention_activations,
                 sep_attention_activations]
-    
     
     
 
@@ -344,6 +344,7 @@ class BertExtractor(object):
             max_length=self.config['max_length'])
         
         indexes_tmp = []
+        # If beginning and end indexes of each sentences are recorded, we only keep the sentence(s) of interest
         for i in range(len(indexes)):
             if type(indexes[i])==list and type(indexes[i][0])==list:
                 indexes_tmp.append(indexes[i][-1])
@@ -360,7 +361,7 @@ class BertExtractor(object):
         else:
             indexes_tmp[0] = (indexes[0][0][0], indexes[0][-1][1])
         
-        for index, batch in enumerate(batches):
+        for index_batch, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
 
             batch = '[CLS] ' + batch + ' [SEP]'
@@ -368,6 +369,7 @@ class BertExtractor(object):
             inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
             inputs_ids = torch.cat(inputs_ids.size(1) * [inputs_ids])
             attention_mask =  torch.diag_embed(torch.tensor([[0 for x in tokenized_text]]))
+
             for i in range(min(len(tokenized_text), self.attention_length_before)):
                 attention_mask = torch.add(attention_mask, torch.diag_embed(torch.tensor([[1 for x in range(len(tokenized_text) - i)]]), offset=-i))
             for i in range(1, min(len(tokenized_text), self.attention_length_after + 1)):
@@ -376,8 +378,8 @@ class BertExtractor(object):
 
             attention_mask = attention_mask.squeeze(0)
 
-            beg = indexes_tmp[index][0] + 1 # because of the special token at the beginning
-            end = indexes_tmp[index][1] + 1 # because of special token
+            beg = indexes_tmp[index_batch][0] + 1 # because of the special token at the beginning
+            end = indexes_tmp[index_batch][1] + 1 # because of special token
 
             inputs_ids = inputs_ids[beg:end, :]
             attention_mask = attention_mask[beg:end, :]
@@ -398,25 +400,25 @@ class BertExtractor(object):
                 #                                                       (batch_size, num_heads, sequence_length, sequence_length)]
                 # filtration
                 if self.model.config.output_hidden_states:
-                    hidden_states_activations_ = np.vstack([torch.cat([encoded_layers[2][layer][i,len(tokenized_text) - encoded_layers[2][layer].size(0) + i,:].unsqueeze(0) for i in range(encoded_layers[2][layer].size(0))], dim=0).unsqueeze(0).detach().numpy() for layer in range(len(encoded_layers[2]))]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
+                    hidden_states_activations_ = np.vstack([torch.cat([encoded_layers[2][layer][i,len(tokenized_text) - encoded_layers[2][layer].size(0) + i - 1,:].unsqueeze(0) for i in range(encoded_layers[2][layer].size(0))], dim=0).unsqueeze(0).detach().numpy() for layer in range(len(encoded_layers[2]))]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
+                    hidden_states_activations_ = np.concatenate([np.zeros((hidden_states_activations_.shape[0], indexes_tmp[index_batch][0] + 1 , hidden_states_activations_.shape[-1])), hidden_states_activations_, np.zeros((hidden_states_activations_.shape[0], len(tokenized_text) - indexes_tmp[index_batch][1] - 1, hidden_states_activations_.shape[-1]))], axis=1)
 
-                    hidden_states_activations_ = np.concatenate([np.zeros((hidden_states_activations_.shape[0], indexes_tmp[index][0] + 1 , hidden_states_activations_.shape[-1])), hidden_states_activations_, np.zeros((hidden_states_activations_.shape[0], len(tokenized_text) - indexes_tmp[index][1] - 1, hidden_states_activations_.shape[-1]))], axis=1)
-
-                    hidden_states_activations += utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes_tmp[index])
+                    hidden_states_activations += utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes_tmp[index_batch])
                     #cls_activations_, sep_activations_ = utils.extract_activations_from_special_tokens(hidden_states_activations_, mapping)
                     #cls_hidden_states_activations += cls_activations_
                     #sep_hidden_states_activations += sep_activations_
                 if self.model.config.output_attentions:
-                    attention_heads_activations_ = np.vstack([torch.cat([encoded_layers[-1][layer][0][i,len(tokenized_text) - encoded_layers[-1][layer][0].size(0) + i,:].unsqueeze(0) for i in range(encoded_layers[-1][layer][0].size(0))], dim=0).unsqueeze(0).detach().numpy() for layer in range(len(encoded_layers[-1]))])
-                    if indexes_tmp[index][0] > 0:
-                        attention_heads_activations_ = np.concatenate([np.zeros((attention_heads_activations_.shape[0], indexes_tmp[index][0] , attention_heads_activations_.shape[-1])), attention_heads_activations_], axis=1)
-                    attention_heads_activations_ = attention_heads_activations_.reshape([
-                        self.NUM_HIDDEN_LAYERS, 
-                        len(tokenized_text), 
-                        self.NUM_ATTENTION_HEADS, 
-                        self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS])
-                    attention_heads_activations_ = np.swapaxes(attention_heads_activations_, 1, 2)
-                    attention_heads_activations += utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping, indexes_tmp[index])
+                    raise NotImplementedError('Not yet implemented...')
+                    #attention_heads_activations_ = np.vstack([torch.cat([encoded_layers[-1][layer][0][i,len(tokenized_text) - encoded_layers[-1][layer][0].size(0) + i,:].unsqueeze(0) for i in range(encoded_layers[-1][layer][0].size(0))], dim=0).unsqueeze(0).detach().numpy() for layer in range(len(encoded_layers[-1]))])
+                    #if indexes_tmp[index_batch][0] > 0:
+                    #    attention_heads_activations_ = np.concatenate([np.zeros((attention_heads_activations_.shape[0], indexes_tmp[index_batch][0] , attention_heads_activations_.shape[-1])), attention_heads_activations_], axis=1)
+                    #attention_heads_activations_ = attention_heads_activations_.reshape([
+                    #    self.NUM_HIDDEN_LAYERS, 
+                    #    len(tokenized_text), 
+                    #    self.NUM_ATTENTION_HEADS, 
+                    #    self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS])
+                    #attention_heads_activations_ = np.swapaxes(attention_heads_activations_, 1, 2)
+                    #attention_heads_activations += utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping, indexes_tmp[index_batch])
                     #cls_attention_, sep_attention_ = utils.extract_heads_activations_from_special_tokens(attention_heads_activations_, mapping)
                     #cls_attention_activations += cls_attention_
                     #sep_attention_activations += sep_attention_
@@ -425,7 +427,8 @@ class BertExtractor(object):
             #cls_hidden_states_activations = pd.DataFrame(np.vstack(cls_hidden_states_activations), columns=['CLS-hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
             #sep_hidden_states_activations = pd.DataFrame(np.vstack(sep_hidden_states_activations), columns=['SEP-hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
         if self.model.config.output_attentions:
-            attention_heads_activations = pd.DataFrame(np.vstack(attention_heads_activations), columns=['attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in np.arange(1, 1 + self.NUM_HIDDEN_LAYERS) for head in range(1, 1 + self.NUM_ATTENTION_HEADS) for index in range(1, 1 + self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
+            raise NotImplementedError('Not yet implemented...')
+            #attention_heads_activations = pd.DataFrame(np.vstack(attention_heads_activations), columns=['attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in np.arange(1, 1 + self.NUM_HIDDEN_LAYERS) for head in range(1, 1 + self.NUM_ATTENTION_HEADS) for index in range(1, 1 + self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
             #cls_attention_activations = pd.DataFrame(np.vstack(cls_attention_activations), columns=['CLS-attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in np.arange(1, 1 + self.NUM_HIDDEN_LAYERS) for head in range(1, 1 + self.NUM_ATTENTION_HEADS) for index in range(1, 1 + self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
             #sep_attention_activations = pd.DataFrame(np.vstack(sep_attention_activations), columns=['SEP-attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in np.arange(1, 1 + self.NUM_HIDDEN_LAYERS) for head in range(1, 1 + self.NUM_ATTENTION_HEADS) for index in range(1, 1 + self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
         return [hidden_states_activations, 

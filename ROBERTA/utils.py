@@ -235,7 +235,7 @@ def batchify_per_sentence_with_pre_and_post_context(iterator, number_of_sentence
     if number_sentence_before > 0:
         start = 0
         stop = min(number_sentence_before, n)
-        token_count = len(tokenizer.tokenize(iterator[stop], add_prefix_space=True))
+        token_count = len(tokenizer.tokenize(' '.join(iterator[:stop]), add_prefix_space=True))
         if token_count > max_length:
             raise ValueError('Cannot fit context with additional sentence. You should reduce context length.')
         batch.append(' '.join(iterator[:stop]))
@@ -357,6 +357,7 @@ def extract_activations_from_token_activations(activation, mapping, indexes):
         word_activation.append([activation[:,index, :] for index in mapping[word_index]])
         word_activation = np.vstack(word_activation)
         new_activations.append(np.mean(word_activation, axis=0).reshape(1,-1))
+    #print(' '.join([tokenizer.decode(tokenizer.convert_tokens_to_ids([tokenized_text[word] for word in mapping[index]])) for index in range(key_start, key_stop + 1)]))
     return new_activations
 
 def extract_activations_from_special_tokens(activation, mapping):
