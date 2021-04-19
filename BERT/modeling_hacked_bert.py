@@ -5,7 +5,9 @@
 
 import logging
 import math
+import numpy as np
 import os
+import matplotlib.pyplot as plt
 
 import torch
 from torch import nn
@@ -220,12 +222,16 @@ class BertSelfAttention(nn.Module):
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        if attention_mask is not None:
+        #if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
-            attention_scores = attention_scores + attention_mask
+            #attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        ##### control context: apply masking after softmax
+        attention_mask = torch.div(attention_mask, 10000) + 1.0
+        attention_probs = torch.mul(attention_probs, attention_mask)
+        #####
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
