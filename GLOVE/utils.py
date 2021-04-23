@@ -149,7 +149,7 @@ def embeddings_past_context(model, iterator, embedding_size, context_size, decre
         for i, item_context in enumerate(iterator[max(0, index-context_size+1):index]): # +1 because context_size==1 is the current word
             if item_context not in model.keys():
                 item_context = '<unk>'
-            activation += model[item_context] * (decreasing_factor ** (len(iterator[max(0, index-context_size+1):index]) - i)))
+            activation += model[item_context] * (decreasing_factor ** (len(iterator[max(0, index-context_size+1):index]) - i))
 
         activations.append(activation/len(iterator[max(0, index-context_size+1):index+1]))
     return pd.DataFrame(np.vstack(activations), columns=columns_activations)
@@ -166,5 +166,5 @@ def embeddings_future_context(model, iterator, embedding_size, context_size, dec
                 item_context = '<unk>'
             activation += model[item_context] * (decreasing_factor ** (i+1))
 
-        activations.append(activation/len(iterator[min(index, len(iterator)): min(index+1 + context_size, len(iterator))])))
+        activations.append(activation/len(iterator[min(index, len(iterator)): min(index+1 + context_size, len(iterator))]))
     return pd.DataFrame(np.vstack(activations), columns=columns_activations)
