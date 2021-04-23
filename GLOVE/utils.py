@@ -138,3 +138,33 @@ def embeddings(model, iterator, embedding_size):
             item = '<unk>'
         activations.append(model[item])
     return pd.DataFrame(np.vstack(activations), columns=columns_activations)
+
+def embeddings_past_context(model, iterator, embedding_size, context_size, decreasing_factor):
+    columns_activations = ['embedding-{}'.format(i) for i in range(1, 1 + embedding_size)]
+    activations = []
+    for index, item in tqdm(enumerate(iterator)):
+        if item not in model.keys():
+            item = '<unk>'
+        activation = model[item]
+        for i, item_context in enumerate(iterator[max(0, index-context_size+1):index]):# +1 because context_size==1 is the current word
+            if item_context not in model.keys():
+                item_context = '<unk>'
+            activation += model[item_context] * (decreasing_factor ** (len(iterator[index-context_size+1:index]) - i)))
+
+        activations.append(activation/(context_size))
+    return pd.DataFrame(np.vstack(activations), columns=columns_activations)
+
+def embeddings_future_context(model, iterator, embedding_size, context_size, decreasing_factor):
+    columns_activations = ['embedding-{}'.format(i) for i in range(1, 1 + embedding_size)]
+    activations = []
+    for index, item in tqdm(enumerate(iterator)):
+        if item not in model.keys():
+            item = '<unk>'
+        activation = model[item]
+        for i, item_context in enumerate(iterator[min(index+1, len(iterator)): min(index+1 + context_size, len(iterator))]):# +1 because context_size==1 for future is the current word + the next word
+            if item_context not in model.keys():
+                item_context = '<unk>'
+            activation += model[item_context] * (decreasing_factor ** (i+1))
+
+        activations.append(activation/(context_size+1))
+    return pd.DataFrame(np.vstack(activations), columns=columns_activations)
