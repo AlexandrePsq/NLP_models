@@ -11,7 +11,7 @@ import numpy as np
 from tokenizer import tokenize
 from modeling_hacked_glove import Glove
 
-from utils import embeddings, filter_args
+from utils import embeddings, filter_args, embeddings_past_context, embeddings_future_context
 
 
 
