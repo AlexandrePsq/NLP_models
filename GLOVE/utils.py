@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 import seaborn as sns
+from numpy import linalg as la
 import matplotlib.pyplot as plt
 from collections import defaultdict
 
@@ -139,32 +140,36 @@ def embeddings(model, iterator, embedding_size):
         activations.append(model[item])
     return pd.DataFrame(np.vstack(activations), columns=columns_activations)
 
-def embeddings_past_context(model, iterator, embedding_size, context_size, decreasing_factor):
+def embeddings_past_context(model, iterator, embedding_size, context_size, decreasing_factor, normalize=False):
     columns_activations = ['embedding-{}'.format(i) for i in range(1, 1 + embedding_size)]
     activations = []
     for index, item in tqdm(enumerate(iterator)):
         activation = np.zeros(embedding_size)
         if item not in model.keys():
             item = '<unk>'
-        activation += model[item]
+        tmp = model[item]/la.norm(model[item], ord=2) if normalize else model[item]
+        activation += tmp
         for i, item_context in enumerate(iterator[max(0, index-context_size+1):index]): # +1 because context_size==1 is the current word
             if item_context not in model.keys():
                 item_context = '<unk>'
-            activation += model[item_context] * (decreasing_factor ** (len(iterator[max(0, index-context_size+1):index]) - i))
+            tmp = model[item_context] if ~normalize else model[item_context]/la.norm(model[item_context], ord=2)
+            activation += tmp * (decreasing_factor ** (len(iterator[max(0, index-context_size+1):index]) - i))
         activations.append(activation/len(iterator[max(0, index-context_size+1):index+1]))
     return pd.DataFrame(np.vstack(activations), columns=columns_activations)
 
-def embeddings_future_context(model, iterator, embedding_size, context_size, decreasing_factor):
+def embeddings_future_context(model, iterator, embedding_size, context_size, decreasing_factor, normalize=False):
     columns_activations = ['embedding-{}'.format(i) for i in range(1, 1 + embedding_size)]
     activations = []
     for index, item in tqdm(enumerate(iterator)):
         activation = np.zeros(embedding_size)
         if item not in model.keys():
             item = '<unk>'
-        activation += model[item]
+        tmp = model[item] if ~normalize else model[item]/la.norm(model[item], ord=2)
+        activation += tmp
         for i, item_context in enumerate(iterator[min(index+1, len(iterator)): min(index+1 + context_size, len(iterator))]): # +1 because context_size==1 for future is the current word + the next word
             if item_context not in model.keys():
                 item_context = '<unk>'
-            activation += model[item_context] * (decreasing_factor ** (i+1))
+            tmp = model[item_context]/la.norm(model[item_context], ord=2) if normalize else model[item_context]
+            activation += tmp * (decreasing_factor ** (i+1))
         activations.append(activation/len(iterator[min(index, len(iterator)): min(index+1 + context_size, len(iterator))]))
     return pd.DataFrame(np.vstack(activations), columns=columns_activations)
