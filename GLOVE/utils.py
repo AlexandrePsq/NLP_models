@@ -140,7 +140,7 @@ def embeddings(model, iterator, embedding_size):
         activations.append(model[item])
     return pd.DataFrame(np.vstack(activations), columns=columns_activations)
 
-def embeddings_past_context(model, iterator, embedding_size, context_size, decreasing_factor, normalize=False):
+def embeddings_past_context(model, iterator, embedding_size, context_size, decreasing_factor, normalize=False, weighted_sum=False):
     columns_activations = ['embedding-{}'.format(i) for i in range(1, 1 + embedding_size)]
     activations = []
     for index, item in tqdm(enumerate(iterator)):
@@ -154,10 +154,14 @@ def embeddings_past_context(model, iterator, embedding_size, context_size, decre
                 item_context = '<unk>'
             tmp = model[item_context]/la.norm(model[item_context], ord=2) if normalize else model[item_context]
             activation += tmp * (decreasing_factor ** (len(iterator[max(0, index-context_size+1):index]) - i))
-        activations.append(activation/len(iterator[max(0, index-context_size+1):index+1]))
+        if weighted_sum:
+            tmp = activation * (1 - decreasing_factor) / (1-decreasing_factor**len(iterator[max(0, index-context_size+1):index+1]))
+        else:
+            tmp = activation / la.norm(activation, ord=2)
+        activations.append(tmp)
     return pd.DataFrame(np.vstack(activations), columns=columns_activations)
 
-def embeddings_future_context(model, iterator, embedding_size, context_size, decreasing_factor, normalize=False):
+def embeddings_future_context(model, iterator, embedding_size, context_size, decreasing_factor, normalize=False, weighted_sum=False):
     columns_activations = ['embedding-{}'.format(i) for i in range(1, 1 + embedding_size)]
     activations = []
     for index, item in tqdm(enumerate(iterator)):
@@ -171,5 +175,9 @@ def embeddings_future_context(model, iterator, embedding_size, context_size, dec
                 item_context = '<unk>'
             tmp = model[item_context]/la.norm(model[item_context], ord=2) if normalize else model[item_context]
             activation += tmp * (decreasing_factor ** (i+1))
-        activations.append(activation/len(iterator[min(index, len(iterator)): min(index+1 + context_size, len(iterator))]))
+        if weighted_sum:
+            tmp = activation * (1 - decreasing_factor) / (1-decreasing_factor**len(iterator[min(index, len(iterator)): min(index+1 + context_size, len(iterator))]))
+        else:
+            tmp = activation / la.norm(activation, ord=2)
+        activations.append(tmp)
     return pd.DataFrame(np.vstack(activations), columns=columns_activations)
