@@ -354,7 +354,8 @@ def batchify_sentences(
     number_sentence_before, 
     number_sentence_after,
     pretrained_model,
-    context_size,
+    past_context_size,
+    future_context_size,
     transformation,
     vocabulary=None,
     dictionary=None,
@@ -369,7 +370,8 @@ def batchify_sentences(
         - number_sentence_before: int
         - number_sentence_after: int
         - pretrained_model: str
-        - context_size: int
+        - past_context_size: int
+        - future_context_size: int
         - transformation: int 
         - vocabulary: list (or something else ?)
         - dictionary: dict
@@ -402,8 +404,9 @@ def batchify_sentences(
         # computing batch and indexes
         batch_tmp, index_tmp = transform_sentence_and_context(
             iterator[start:stop_post_context], 
-            context_size, 
-            pretrained_model,
+            past_context_size=past_context_size,
+            future_context_size=future_context_size,
+            pretrained_model=pretrained_model,
             transformation=transformation,
             vocabulary=vocabulary,
             dictionary=dictionary,
