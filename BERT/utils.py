@@ -125,86 +125,149 @@ def save(model, tokenizer, output_dir, index):
     model_to_save.config.to_json_file(output_config_file)
     tokenizer.save_pretrained(output_dir)
 
-def batchify_per_sentence(iterator, number_of_sentence, pretrained_bert, max_length=512):
-    """Batchify iterator sentence, to get batches of specified number of sentences.
-    Arguments:
-        - iterator: sentence iterator
-        - number_of_sentence: int
-    Returns:
-        - batch: sequence iterator
-        - indexes: tuple of int
-    """
-    iterator = [item.strip() for item in iterator]
-    max_length -= 2 # for special tokens
-    tokenizer = BertTokenizer.from_pretrained(pretrained_bert)
-    
-    batch = []
-    indexes = []
-    sentence_count = 0
-    batch_modifications = 0
-    n = len(iterator)
-    while sentence_count < n:
-        stop = min(sentence_count+number_of_sentence, n)
-        token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[sentence_count:stop])))
-        while token_count > max_length:
-            print('WARNING: decreasing number of sentence in a batch to fit max length of {}'.format(max_length))
-            batch_modifications += 1
-            stop -= 1
-            token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[sentence_count:stop])))
-        batch.append(' '.join(iterator[sentence_count:stop]))
-        indexes.append((0, len(tokenizer.wordpiece_tokenizer.tokenize(batch[-1]))))
-        sentence_count = stop
-    if batch_modifications > 0:
-        print('WARNING: {} reductions were done when constructing batches... You should reduce the number of sentence to include.'.format(batch_modifications))
-    return batch, indexes
 
-def batchify_per_sentence_with_context(iterator, number_of_sentence, number_sentence_before, pretrained_bert, max_length=512):
-    """Batchify iterator sentence, to get batches of specified number of sentences.
-    Arguments:
-        - iterator: sentence iterator
-        - number_of_sentence: int
-        - number_sentence_before: int
+def pick_random_word(words, vocabulary):
+    """ Replace a word with another.
+    Can be applied to list of words.
+    Args:
+        - words: str (or list of str)
+        - vocabulary: list (of strings)
     Returns:
-        - batch: sequence iterator
-        - indexes: tuple of int
+        - new_words: str (or list of str)
     """
-    iterator = [item.strip() for item in iterator]
-    max_length -= 2 # for special tokens
-    assert number_of_sentence > 0
-    tokenizer = BertTokenizer.from_pretrained(pretrained_bert)
-    
-    batch = []
-    indexes = []
-    sentence_count = 0
-    batch_modifications = 0
-    n = len(iterator)
-    if number_sentence_before > 0:
-        start = 0
-        stop = min(number_sentence_before, n)
-        token_count = len(tokenizer.wordpiece_tokenizer.tokenize(iterator[stop]))
-        if token_count > max_length:
-            raise ValueError('Cannot fit context with additional sentence. You should reduce context length.')
-        batch.append(' '.join(iterator[:stop]))
-        indexes.append((0, len(tokenizer.wordpiece_tokenizer.tokenize(batch[-1]))))
-        sentence_count = stop
+    new_words = []
+    if type(words)==list:
+        new_words = [random.sample(vocabulary, 1) for word in words]
+    elif type(words)==str:
+        new_words = random.sample(vocabulary, 1)
+    return new_words
 
-    while sentence_count < n:
-        start = sentence_count - number_sentence_before
-        stop = min(sentence_count + number_of_sentence, n)
-        token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:stop])))
-        while token_count > max_length:
-            print('WARNING: decreasing number of sentence in a batch to fit max length of {}'.format(max_length))
-            batch_modifications += 1
-            stop -= 1
-            token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[sentence_count:stop])))
-            if stop==start+number_sentence_before:
-                raise ValueError('Too many context sentence. You reach {} tokens only with context.'.format(token_count))
-        batch.append(' '.join(iterator[start:stop]))
-        indexes.append((len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:start+number_sentence_before]))), len(tokenizer.wordpiece_tokenizer.tokenize(batch[-1]))))
-        sentence_count = stop
-    if batch_modifications > 0:
-        print('WARNING: {} reductions were done when constructing batches... You should reduce the number of sentence to include.'.format(batch_modifications))
-    return batch, indexes
+
+def pick_pos_word(words, dictionary):
+    """ Replace a word with another with same POS tagging.
+    Can be applied to list of words.
+    Args:
+        - words: str (or list of str)
+        - dictionary: dict {word: POS ; POS: [word1, ..., wordN]}
+    Returns:
+        - new_words: str (or list of str)
+    """
+    new_words = []
+    if type(words)==list:
+        for word in words:
+            pos = dictionary[word]
+            replacement = random.sample(dictionary[pos], 1)
+            new_words.append(replacement)
+    elif type(words)==str:
+        new_words = random.sample(dictionary[dictionary[words]], 1)
+    return new_words
+
+
+def transform_context(sequence, transformation='shuffle', dictionary=None, vocabulary=None, start_at=None, stop_at=None):
+    """ Shuffle all words in a sequence of tokens (words/punctuation signs), or replace them with 
+    words with identical POS or random words.
+    Args:
+        - sequence: list of words/punctuation signs
+        - start_at: int (start shuffling at this index)
+    Returns:
+        - new_sequence: list of words/punctuation signs
+    """ 
+    words = sequence.split()
+    punctuation = ['.', '!', '?', '...', '\'', ',', ';', ':', '/', '-', '"', '‘', '’', '(', ')', '{', '}', '[', ']', '`', '“', '”', '—']
+    if stop_at is not None:
+        supp = len([word for word in words[stop_at:] if word in punctuation]) # we do not count punctuation in the number of words to shuffle
+        stop_at -= supp
+    else:
+        stop_at = np.inf
+    if start_at is not None:
+        supp = len([word for word in words[:start_at] if word in punctuation]) # we do not count punctuation in the number of words to shuffle
+        start_at += supp
+    else:
+        start_at = np.inf
+    
+    # For each word, we compute the index of the other words to shuffle
+    index_words = [i for i, item in enumerate(words) if item not in punctuation if ((i > start_at) or (i <= stop_at))]
+    new_sequence = np.array(words.copy())
+    if transformation=='shuffle':
+        new_words_index = random.sample(index_words, len(index_words))
+        new_sequence[index_words] = new_sequence[new_words_index]
+    elif transformation=='pos_replacement':
+        new_sequence[index_words] = pick_pos_word(new_sequence[index_words], dictionary)
+    elif transformation=='random_replacement':
+        new_sequence[index_words] = pick_random_word(new_sequence[index_words], vocabulary)
+    return new_sequence
+
+
+def transform_sentence_and_context(
+    iterator, 
+    past_context_size, 
+    future_context_size, 
+    pretrained_model,
+    transformation='shuffle',
+    vocabulary=None,
+    dictionary=None,
+    select=None,
+    seed=1111):
+    """ Given a list of sentences, for each word, we transform its context outside a certain context window.
+    Args:
+        - iterator: list (of str)
+        - context_size: int
+        - pretrained_model: str
+        - vocabulary: list
+        - dictionary: dict
+        - seed: int
+    Returns:
+        - batch_tmp: list (of str)
+        - index_tmp: list (of tuple of int)
+    """
+    random.seed(seed)
+    punctuation = ['.', '!', '?', '...', '\'', ',', ';', ':', '/', '-', '"', '‘', '’', '(', ')', '{', '}', '[', ']', '`', '“', '”', '—']
+    if select is None:
+        words = ' '.join(iterator).split()
+    else:
+        words = iterator[select].split()
+        print('Careful last sentence selected...')
+        
+    all_words = ' '.join(iterator).split()
+    words_before = [] if select is None else ' '.join(iterator[:select]).split()
+    supp_before = [len([word for word in all_words[max(j+len(words_before)+1-past_context_size, 0):j+len(words_before)+1] if word in punctuation]) for j in range(len(words))] # we do not count punctuation in the number of words to shuffle
+    supp_after = [len([word for word in all_words[j+len(words_before)+1:min(j+len(words_before)+1+future_context_size, len(words))] if word in punctuation]) for j in range(len(words))] # we do not count punctuation in the number of words to shuffle
+
+    # For each word, we compute the index of the other words to transform
+    # We transform past context. Change conditions "i<j" and ... to something else if needed
+    index_words_list = [[i for i, item in enumerate(all_words) if item not in punctuation if ((i!=(j+len(words_before))) and ((i>j+len(words_before)+future_context_size+supp_after[j]) or (i <= j+len(words_before)-past_context_size-supp_before[j])))] for j in range(len(words))] # '<=' because context_size of 1 is the current word
+
+    # Create the new array of sentences with original words 
+    new_words = np.tile(np.array(all_words.copy()), (len(words), 1))
+
+    for i in range(len(new_words)):
+        if len(index_words_list[i])>0: # if there are words to change...
+            if transformation=='shuffle':
+                # Replace words that need to be shuffled by the random sampling (except fix point and punctuation)
+                new_words[i, index_words_list[i]] = new_words[i, random.sample(index_words_list[i], len(index_words_list[i]))]
+            elif transformation=='pos_replacement':
+                # Replace words that need to be replaced by words with same POS (except fix point and punctuation)
+                new_words[i, index_words_list[i]] = pick_pos_word(new_words[i, index_words_list[i]], dictionary)
+            elif transformation=='random_replacement':
+                # Replace words that need to be replaced by random words (except fix point and punctuation)
+                new_words[i, index_words_list[i]] = pick_random_word(new_words[i, index_words_list[i]], vocabulary)
+
+    # Convert array to list
+    new_words = list(new_words)
+    new_words = [list(item) for item in new_words]
+    batch_tmp = []
+    index_tmp = []
+    tokenizer = BertTokenizer.from_pretrained(pretrained_model) # to replace with tokenizer of interest
+    # adding transformed context to each sentence
+    for i, sentence in enumerate(new_words):
+        batch_tmp.append(' '.join(sentence).strip())
+        # Determining associated indexes
+        tmp1 = ' '.join(sentence[:i])
+        tmp2 = ' '.join(sentence[:i+1])
+        index_tmp.append((len(tokenizer.wordpiece_tokenizer.tokenize(tmp1.strip())), 
+                     len(tokenizer.wordpiece_tokenizer.tokenize(tmp2.strip()))
+                    )) # to replace with tokenizer of interest and arguments
+    return batch_tmp, index_tmp
 
 def batchify_per_sentence_with_pre_and_post_context(iterator, number_of_sentence, number_sentence_before, number_sentence_after, pretrained_bert, max_length=512, stop_attention_before_sent=0, stop_attention_at_sent_before=None):
     """Batchify iterator sentence, to get batches of specified number of sentences.
@@ -227,43 +290,10 @@ def batchify_per_sentence_with_pre_and_post_context(iterator, number_of_sentence
     batch = []
     indexes = []
     sentence_count = 0
-    stop = 0
     n = len(iterator)
-    if number_sentence_before > 0:
-        start = 0
-        if stop_attention_at_sent_before is not None:
-            while stop < number_sentence_before:
-                stop = min(start + stop_attention_at_sent_before + number_of_sentence, n)
-                token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:stop])))
-                if token_count > max_length:
-                    raise ValueError('Cannot fit context with additional sentence. You should reduce context length.')
-                batch.append(' '.join(iterator[start:stop]))
-                beg = 0
-                res = []
-                for item in iterator[start:stop]:
-                    end = len(tokenizer.wordpiece_tokenizer.tokenize(item)) + beg
-                    res.append((beg, end))
-                    beg = end
-                indexes.append(res)
-                start += 1
-            sentence_count = stop
-        else:
-            stop = min(number_sentence_before, n)
-            token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:stop])))
-            if token_count > max_length:
-                raise ValueError('Cannot fit context with additional sentence. You should reduce context length.')
-            batch.append(' '.join(iterator[start:stop]))
-            beg = 0
-            res = []
-            for item in iterator[start:stop]:
-                end = len(tokenizer.wordpiece_tokenizer.tokenize(item)) + beg
-                res.append((beg, end))
-                beg = end
-            indexes.append(res)
-            sentence_count = stop
 
     while sentence_count < n:
-        start = sentence_count - number_sentence_before
+        start = max(sentence_count - number_sentence_before, 0)
         stop = min(sentence_count + number_of_sentence, n)
         stop_post_context = min(stop + number_sentence_after, n)
         token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:stop_post_context])))
@@ -276,54 +306,12 @@ def batchify_per_sentence_with_pre_and_post_context(iterator, number_of_sentence
             end = len(tokenizer.wordpiece_tokenizer.tokenize(item)) + beg
             res.append((beg, end))
             beg = end
-        soi = (len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:start+number_sentence_before]))), len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:stop]))))
+        soi = (len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:stop-number_of_sentence]))), len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:stop]))))
         indexes.append([res, soi])
         sentence_count = stop
 
     return batch, indexes
 
-def batchify(iterator, context_length, pretrained_bert, max_length=512):
-    """Batchify iterator sentence, to get minimum context length 
-    when possible.
-    Arguments:
-        - iterator: sentence iterator
-        - context_length: int
-    Returns:
-        - batch: sequence iterator
-        - indexes: tuple of int
-    """
-    iterator = [item.strip() for item in iterator]
-    max_length -= 2 # for special tokens
-    tokenizer = BertTokenizer.from_pretrained(pretrained_bert)
-    
-    batch = []
-    indexes = []
-    sentence_count = 0
-    n = len(iterator)
-    
-    assert context_length < max_length
-    token_count = 0
-    while sentence_count < n and token_count < max_length:
-        token_count += len(tokenizer.wordpiece_tokenizer.tokenize(iterator[sentence_count]))
-        if token_count < max_length:
-            sentence_count += 1
-    batch.append(' '.join(iterator[:sentence_count]))
-    indexes.append((0, len(tokenizer.wordpiece_tokenizer.tokenize(batch[-1]))))
-    
-    while sentence_count < n:
-        token_count = 0
-        sentence_index = sentence_count - 1
-        tmp = sentence_count
-        while token_count < context_length:
-            token_count += len(tokenizer.wordpiece_tokenizer.tokenize(iterator[sentence_index]))
-            sentence_index -= 1
-        while sentence_count < n and token_count < max_length:
-            token_count += len(tokenizer.wordpiece_tokenizer.tokenize(iterator[sentence_count]))
-            if token_count < max_length:
-                sentence_count += 1
-        batch.append(' '.join(iterator[sentence_index+1:sentence_count]))
-        indexes.append((len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[sentence_index+1:tmp]))), len(tokenizer.wordpiece_tokenizer.tokenize(batch[-1]))))
-    return batch, indexes
 
 def batchify_text_with_memory_size(iterator, tokenizer, memory_size, bos='[CLS]', eos='[SEP]'):
     """Create batch of identical size of truncated input with given size in number of words.
@@ -360,6 +348,76 @@ def batchify_text_with_memory_size(iterator, tokenizer, memory_size, bos='[CLS]'
     
     return final_iterator, final_mappings
 
+def batchify_sentences(
+    iterator,
+    number_of_sentence, 
+    number_sentence_before, 
+    number_sentence_after,
+    pretrained_model,
+    context_size,
+    transformation,
+    vocabulary=None,
+    dictionary=None,
+    seed=1111,
+    max_length=512,
+    **kwargs
+):
+    """Prepare text to be processed by the model, applying either shuffling, randomization or replacement outside the context window..
+    Arguments:
+        - iterator: sentence iterator
+        - number_of_sentence: int
+        - number_sentence_before: int
+        - number_sentence_after: int
+        - pretrained_model: str
+        - context_size: int
+        - transformation: int 
+        - vocabulary: list (or something else ?)
+        - dictionary: dict
+        - seed: int
+        - max_length: int
+        
+    Returns:
+        - batches: list of str
+        - indexes: list of tuples
+    """
+    iterator = [item.strip() for item in iterator]
+    max_length -= 2 # for special tokens
+    assert number_of_sentence > 0
+    tokenizer = BertTokenizer.from_pretrained(pretrained_model) # to replace with tokenizer of interest
+    
+    batch = []
+    indexes = []
+    sentence_count = 0
+    n = len(iterator)
+    
+    # rest of the iterator + context 
+    while sentence_count < n:
+        start = max(sentence_count - number_sentence_before, 0)
+        stop = min(sentence_count + number_of_sentence, n)
+        stop_post_context = min(stop + number_sentence_after, n)
+
+        token_count = len(tokenizer.wordpiece_tokenizer.tokenize(' '.join(iterator[start:stop_post_context]))) # to replace with tokenizer of interest and arguments
+        if token_count > max_length:
+            raise ValueError('Cannot fit context with additional sentence. You should reduce context length.')
+        # computing batch and indexes
+        batch_tmp, index_tmp = transform_sentence_and_context(
+            iterator[start:stop_post_context], 
+            context_size, 
+            pretrained_model,
+            transformation=transformation,
+            vocabulary=vocabulary,
+            dictionary=dictionary,
+            select=stop-start-1,
+            seed=seed,
+            **kwargs
+        )        
+        batch += batch_tmp
+        indexes += index_tmp
+        
+        sentence_count = stop
+        
+    return batch, indexes
+
 
 #########################################
 ###### Activations related functions ####
@@ -389,17 +447,21 @@ def match_tokenized_to_untokenized(tokenized_sent, untokenized_sent):
         tokenized_sent_index += 1
     return mapping
 
-def extract_activations_from_token_activations(activation, mapping, indexes):
+def extract_activations_from_token_activations(activation, mapping, indexes, tokenizer, tokenized_text):
     """Take the average activations of the tokens related to a given word."""
     new_activations = []
     key_start = None
     key_stop = None
+    print(tokenized_text[indexes[0]:indexes[1]])
+    for key in mapping.keys():
+        print(mapping[key], ''.join([tokenized_text[i] for i in mapping[key]]))
     for key_, value in mapping.items(): 
         if (value[0] - 1) == (indexes[0]): #because we added [CLS] token at the beginning
             key_start = key_
     for key_, value in mapping.items(): 
         if value[-1] == (indexes[1]): #because we added [CLS] token at the beginning
             key_stop = key_
+    print(key_start, key_stop)
     for word_index in range(key_start, key_stop + 1): # len(mapping.keys()) - 1
         word_activation = []
         word_activation.append([activation[:,index, :] for index in mapping[word_index]])
