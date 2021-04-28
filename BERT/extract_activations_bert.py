@@ -115,6 +115,8 @@ if __name__=='__main__':
             #cls_activations = pd.concat([cls_hidden_states_activations, cls_attention_activations], axis=1)
             #sep_activations = pd.concat([sep_hidden_states_activations, sep_attention_activations], axis=1)
 
+            check_folder(saving_path_folders[index])
+            hidden_states_activations.to_csv(os.path.join(saving_path_folders[index], 'activations_run{}.csv'.format(run_index + 1)), index=False)
             transform(
                 hidden_states_activations, 
                 saving_path_folders[index], 

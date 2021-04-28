@@ -101,6 +101,8 @@ if __name__=='__main__':
             activations  = extractor.extract_activations(iterator, language)
             hidden_states_activations = activations[0]
             
+            check_folder(saving_path_folders[index])
+            hidden_states_activations.to_csv(os.path.join(saving_path_folders[index], 'activations_run{}.csv'.format(run_index + 1)), index=False)
             transform(
                 hidden_states_activations, 
                 saving_path_folders[index], 
