@@ -226,31 +226,46 @@ def transform_sentence_and_context(
         words = ' '.join(iterator).split()
     else:
         words = iterator[select].split()
-        print('Careful last sentence selected...')
         
     all_words = ' '.join(iterator).split()
     words_before = [] if select is None else ' '.join(iterator[:select]).split()
     supp_before = [len([word for word in all_words[max(j+len(words_before)+1-past_context_size, 0):j+len(words_before)+1] if word in punctuation]) for j in range(len(words))] # we do not count punctuation in the number of words to shuffle
-    supp_after = [len([word for word in all_words[j+len(words_before)+1:min(j+len(words_before)+1+future_context_size, len(words))] if word in punctuation]) for j in range(len(words))] # we do not count punctuation in the number of words to shuffle
+    supp_after = [len([word for word in all_words[j+len(words_before)+1:min(j+len(words_before)+1+future_context_size, len(all_words))] if word in punctuation]) for j in range(len(words))] # we do not count punctuation in the number of words to shuffle
 
     # For each word, we compute the index of the other words to transform
     # We transform past context. Change conditions "i<j" and ... to something else if needed
-    index_words_list = [[i for i, item in enumerate(all_words) if item not in punctuation if ((i!=(j+len(words_before))) and ((i>j+len(words_before)+future_context_size+supp_after[j]) or (i <= j+len(words_before)-past_context_size-supp_before[j])))] for j in range(len(words))] # '<=' because context_size of 1 is the current word
+    index_words_list_before = [[i for i, item in enumerate(all_words) if item not in punctuation if ((i!=(j+len(words_before))) and  (i <= j+len(words_before)-past_context_size-supp_before[j]))] for j in range(len(words))] # '<=' because context_size of 1 is the current word
+    index_words_list_after = [[i for i, item in enumerate(all_words) if item not in punctuation if ((i!=(j+len(words_before))) and (i>j+len(words_before)+future_context_size+supp_after[j]))] for j in range(len(words))] # '<=' because context_size of 1 is the current word
 
     # Create the new array of sentences with original words 
     new_words = np.tile(np.array(all_words.copy()), (len(words), 1))
 
     for i in range(len(new_words)):
-        if len(index_words_list[i])>0: # if there are words to change...
+        if len(index_words_list_before[i])>0: # if there are words to change...
             if transformation=='shuffle':
                 # Replace words that need to be shuffled by the random sampling (except fix point and punctuation)
-                new_words[i, index_words_list[i]] = new_words[i, random.sample(index_words_list[i], len(index_words_list[i]))]
+                new_order = random.sample(index_words_list_before[i], len(index_words_list_before[i]))
+                if len(index_words_list_before[i])>1:
+                    while new_order==index_words_list_before[i]:
+                        new_order = random.sample(index_words_list_before[i], len(index_words_list_before[i]))
+                new_words[i, index_words_list_before[i]] = new_words[i, new_order]
             elif transformation=='pos_replacement':
                 # Replace words that need to be replaced by words with same POS (except fix point and punctuation)
-                new_words[i, index_words_list[i]] = pick_pos_word(new_words[i, index_words_list[i]], dictionary)
+                new_words[i, index_words_list_before[i]] = pick_pos_word(new_words[i, index_words_list_before[i]], dictionary)
             elif transformation=='random_replacement':
                 # Replace words that need to be replaced by random words (except fix point and punctuation)
-                new_words[i, index_words_list[i]] = pick_random_word(new_words[i, index_words_list[i]], vocabulary)
+                new_words[i, index_words_list_before[i]] = pick_random_word(new_words[i, index_words_list_before[i]], vocabulary)
+        if len(index_words_list_after[i])>0: # if there are words to change...
+            if transformation=='shuffle':
+                new_order = random.sample(index_words_list_after[i], len(index_words_list_after[i]))
+                if len(index_words_list_after[i])>1:
+                    while new_order==index_words_list_after[i]:
+                        new_order = random.sample(index_words_list_after[i], len(index_words_list_after[i]))
+                new_words[i, index_words_list_after[i]] = new_words[i, new_order]
+            elif transformation=='pos_replacement':
+                new_words[i, index_words_list_after[i]] = pick_pos_word(new_words[i, index_words_list_after[i]], dictionary)
+            elif transformation=='random_replacement':
+                new_words[i, index_words_list_after[i]] = pick_random_word(new_words[i, index_words_list_after[i]], vocabulary)
 
     # Convert array to list
     new_words = list(new_words)
@@ -262,8 +277,8 @@ def transform_sentence_and_context(
     for i, sentence in enumerate(new_words):
         batch_tmp.append(' '.join(sentence).strip())
         # Determining associated indexes
-        tmp1 = ' '.join(sentence[:i])
-        tmp2 = ' '.join(sentence[:i+1])
+        tmp1 = ' '.join(sentence[:i+len(words_before)])
+        tmp2 = ' '.join(sentence[:i+len(words_before)+1])
         index_tmp.append((len(tokenizer.wordpiece_tokenizer.tokenize(tmp1.strip())), 
                      len(tokenizer.wordpiece_tokenizer.tokenize(tmp2.strip()))
                     )) # to replace with tokenizer of interest and arguments
