@@ -29,6 +29,7 @@ class GPT2Extractor(object):
         attention_length_before=1,
         config_path=None, 
         max_length=512, 
+        seed=1111,
         context_length=250, 
         number_of_sentence=1, 
         number_of_sentence_before=0,
@@ -61,6 +62,7 @@ class GPT2Extractor(object):
                                                                         'stop_attention_before_sent': stop_attention_before_sent,
                                                                         'tokens_vocabulary': tokens_vocabulary,
                                                                         'pos_dictionary': pos_dictionary,
+                                                                        'seed': seed,
                                                                         }
         self.prediction_type = prediction_type # ['sentence', 'token-level']
 
