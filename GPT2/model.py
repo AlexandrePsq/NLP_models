@@ -34,7 +34,9 @@ class GPT2Extractor(object):
         number_of_sentence_before=0,
         stop_attention_at_sent=None,
         stop_attention_before_sent=0,
-        add_prefix_space=True
+        add_prefix_space=True,
+        tokens_vocabulary=None,
+        pos_dictionary=None,
         ):
         super(GPT2Extractor, self).__init__()
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_gpt2_model)
@@ -56,7 +58,9 @@ class GPT2Extractor(object):
                                                                         'number_of_sentence_before': number_of_sentence_before,
                                                                         'attention_length_before': attention_length_before,
                                                                         'stop_attention_at_sent': stop_attention_at_sent, 
-                                                                        'stop_attention_before_sent': stop_attention_before_sent
+                                                                        'stop_attention_before_sent': stop_attention_before_sent,
+                                                                        'tokens_vocabulary': tokens_vocabulary,
+                                                                        'pos_dictionary': pos_dictionary,
                                                                         }
         self.prediction_type = prediction_type # ['sentence', 'token-level']
 
