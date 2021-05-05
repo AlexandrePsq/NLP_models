@@ -469,10 +469,10 @@ class BertExtractor(object):
 
             batch = '[CLS] ' + batch + ' [SEP]'
             tokenized_text = self.tokenizer.wordpiece_tokenizer.tokenize(batch)
-            print('Batch number: ', index_batch, ' - ' , batch)
-            print(tokenized_text)
-            print('indexes:', indexes[index_batch], tokenized_text[indexes[index_batch][0]:indexes[index_batch][1]])
-            print()
+            #print('Batch number: ', index_batch, ' - ' , batch)
+            #print(tokenized_text)
+            #print('indexes:', indexes[index_batch], tokenized_text[indexes[index_batch][0]:indexes[index_batch][1]])
+            #print()
             inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
 
             mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)

@@ -148,14 +148,15 @@ class Attention(nn.Module):
         mask = self.bias[:, :, ns - nd : ns, :ns]
         w = torch.where(mask, w, self.masked_bias)
 
-        #if attention_mask is not None:
-        #    # Apply the attention mask
-        #    w = w + attention_mask
+        if attention_mask is not None:
+            # Apply the attention mask
+            w = w + attention_mask
 
         w = nn.Softmax(dim=-1)(w)
         ##### control context: apply masking after softmax
-        attention_mask = torch.div(attention_mask, 10000) + 1.0
-        w = torch.mul(w, attention_mask)
+        #if attention_mask is not None:
+        #    attention_mask = torch.div(attention_mask, 10000) + 1.0
+        #    w = torch.mul(w, attention_mask)
         #####
         w = self.attn_dropout(w)
 
