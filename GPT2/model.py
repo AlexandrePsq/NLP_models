@@ -350,7 +350,7 @@ class GPT2Extractor(object):
 
                 if self.model.config.output_hidden_states:
                     hidden_states_activations_ = np.vstack(encoded_layers[2]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
-                    hidden_states_activations += utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes[index_batch]) #verify if we have to add 1 to indexes values
+                    hidden_states_activations += utils.extract_activations_from_token_activations_special(hidden_states_activations_, mapping, indexes[index_batch]) #verify if we have to add 1 to indexes values
 
                 if self.model.config.output_attentions:
                     raise NotImplementedError('Not yet implemented...')
