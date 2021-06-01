@@ -130,6 +130,9 @@ class BertExtractor(object):
             
         elif 'control-context' in self.prediction_type:
             activations = self.get_token_level_activations(iterator, language)
+            
+        elif 'constituent_parsing' in self.prediction_type:
+            activations = self.get_token_level_activations(iterator, language)
         
         elif 'truncated' in self.prediction_type:
             activations = self.get_token_level_activations(iterator, language)
