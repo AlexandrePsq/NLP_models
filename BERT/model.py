@@ -14,7 +14,6 @@ import json
 from numpy.lib.npyio import zipfile_factory
 import torch
 import numpy as np
-from tqdm import tqdm
 import pandas as pd
 from transformers import BertTokenizer, BertConfig
 
@@ -371,7 +370,7 @@ class BertExtractor(object):
                 else:
                     indexes_tmp.append(None)
         
-        for index_batch, batch in tqdm(enumerate(batches)):
+        for index_batch, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
 
             if self.prediction_type=='constituent_parsing':
