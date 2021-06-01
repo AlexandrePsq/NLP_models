@@ -374,6 +374,7 @@ class BertExtractor(object):
             
             if self.prediction_type=='constituent_parsing':
                 attention_mask = bert_utils.create_attention_mask(tokenized_text, mapping, constituent_parsing_list, constituent_parsing_level=self.constituent_parsing_level)
+                attention_mask = torch.tensor(attention_mask)
             elif 'control-context' in self.prediction_type:
                 attention_mask =  torch.diag_embed(torch.tensor([[0 for x in tokenized_text]]))
                 for i in range(min(len(tokenized_text), self.attention_length_before)):
@@ -381,8 +382,7 @@ class BertExtractor(object):
                 for i in range(1, min(len(tokenized_text), self.attention_length_after + 1)):
                     attention_mask = torch.add(attention_mask, torch.diag_embed(torch.tensor([[1 for x in range(len(tokenized_text) - i)]]), offset=i))
             
-
-            attention_mask = attention_mask.squeeze(0)
+                attention_mask = attention_mask.squeeze(0)
 
             beg = indexes_tmp[index_batch][0] + 1 # because of the special token at the beginning
             end = indexes_tmp[index_batch][1] + 1 # because of special token
