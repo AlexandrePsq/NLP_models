@@ -13,9 +13,18 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from transformers.activations import gelu, gelu_new, swish
-from transformers.configuration_bert import BertConfig
-from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from transformers.activations import gelu, gelu_new
+from transformers import BertConfig
+
+from transformers.file_utils import (
+    ModelOutput,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
+
+
 from transformers.modeling_utils import PreTrainedModel, prune_linear_layer
 
 
@@ -123,7 +132,7 @@ def mish(x):
     return x * torch.tanh(nn.functional.softplus(x))
 
 
-ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish, "gelu_new": gelu_new, "mish": mish}
+ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "gelu_new": gelu_new, "mish": mish}
 
 
 BertLayerNorm = torch.nn.LayerNorm
@@ -222,16 +231,18 @@ class BertSelfAttention(nn.Module):
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
-            attention_scores = attention_scores + attention_mask
-
+        ##### control context: apply masking before softmax
+        #if attention_mask is not None:
+        #    # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+        #    attention_scores = attention_scores + attention_mask
+        #####
+        
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
         ##### control context: apply masking after softmax
-        #if attention_mask is not None:
-        #    attention_mask = torch.div(attention_mask, 10000) + 1.0
-        #    attention_probs = torch.mul(attention_probs, attention_mask)
+        if attention_mask is not None:
+            attention_mask = torch.div(attention_mask, 10000) + 1.0
+            attention_probs = torch.mul(attention_probs, attention_mask)
         #####
 
         # This is actually dropping out entire tokens to attend to, which might
@@ -629,7 +640,7 @@ class BertModel(BertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    
     def forward(
         self,
         input_ids=None,
@@ -812,7 +823,7 @@ class BertForPreTraining(BertPreTrainedModel):
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    
     def forward(
         self,
         input_ids=None,
@@ -912,7 +923,7 @@ class BertForMaskedLM(BertPreTrainedModel):
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    
     def forward(
         self,
         input_ids=None,
@@ -1023,7 +1034,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    
     def forward(
         self,
         input_ids=None,
@@ -1112,7 +1123,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    
     def forward(
         self,
         input_ids=None,
@@ -1208,7 +1219,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    
     def forward(
         self,
         input_ids=None,
@@ -1309,7 +1320,7 @@ class BertForTokenClassification(BertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    
     def forward(
         self,
         input_ids=None,
@@ -1406,7 +1417,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    
     def forward(
         self,
         input_ids=None,

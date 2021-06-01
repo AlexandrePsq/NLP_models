@@ -456,8 +456,8 @@ def create_attention_mask(tokenized_text, mapping, index_list, constituent_parsi
     """
     n = len(tokenized_text)
     attention_mask = np.zeros((n, n))
-    for j, key in mapping.keys():
-        for i, v in index_list:
+    for j, key in enumerate(mapping.keys()):
+        for i, v in enumerate(index_list):
             if j in v:
                 for token_i in mapping[i]:
                     for token_j in mapping[j]:

@@ -364,6 +364,8 @@ class BertExtractor(object):
         for index_batch, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
 
+            if self.prediction_type=='constituent_parsing':
+                constituent_parsing_list = bert_utils.get_constituent_parsing_list(batch, level=self.constituent_parsing_level, skip_punctuation=True, incremental=False)
             batch = '[CLS] ' + batch + ' [SEP]'
             tokenized_text = self.tokenizer.wordpiece_tokenizer.tokenize(batch)
             inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
@@ -371,7 +373,6 @@ class BertExtractor(object):
             mapping = bert_utils.match_tokenized_to_untokenized(tokenized_text, batch)
             
             if self.prediction_type=='constituent_parsing':
-                constituent_parsing_list = bert_utils.get_constituent_parsing_list(batch, level=self.constituent_parsing_level, skip_punctuation=True, incremental=False)
                 attention_mask = bert_utils.create_attention_mask(tokenized_text, mapping, constituent_parsing_list, constituent_parsing_level=self.constituent_parsing_level)
             elif 'control-context' in self.prediction_type:
                 attention_mask =  torch.diag_embed(torch.tensor([[0 for x in tokenized_text]]))
