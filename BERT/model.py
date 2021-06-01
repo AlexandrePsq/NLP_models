@@ -66,6 +66,7 @@ class BertExtractor(object):
         self.attention_length_before = attention_length_before
         self.attention_length_after = attention_length_after
         self.pretrained_bert_model = pretrained_bert_model
+        self.constituent_parsing_level = constituent_parsing_level
         self.NUM_HIDDEN_LAYERS = self.model.config.num_hidden_layers
         self.FEATURE_COUNT = self.model.config.hidden_size
         self.NUM_ATTENTION_HEADS = self.model.config.num_attention_heads
@@ -79,6 +80,7 @@ class BertExtractor(object):
                         'attention_length_after': attention_length_after,
                         'stop_attention_at_sent_before': stop_attention_at_sent_before, 
                         'stop_attention_before_sent': stop_attention_before_sent,
+                        'constituent_parsing_level': constituent_parsing_level,
                         'output_hidden_states': output_hidden_states,
                         'output_attentions': output_attentions,
                         'model_type': 'bert',
