@@ -2,6 +2,8 @@ import os
 import glob
 import torch
 import gc
+import spacy
+import yaml
 import argparse
 import numpy as np
 import pandas as pd
@@ -12,9 +14,35 @@ from tokenizer import tokenize
 from utils import set_seed
 from numpy import linalg as la
 
-
+from get_dependency_parsing import generate_pos_freq_sample, generate_freq_sample, filter_list
 
 #### Functions ####
+
+
+def read_yaml(yaml_path):
+    """Open and read safely a yaml file."""
+    with open(yaml_path, 'r') as stream:
+        try:
+            parameters = yaml.safe_load(stream)
+        except :
+            print("Couldn't load yaml file: {}.".format(yaml_path))
+            quit()
+    return parameters
+
+def save_yaml(data, yaml_path):
+    """Open and write safely in a yaml file.
+    Arguments:
+        - data: list/dict/str/int/float
+        -yaml_path: str
+    """
+    with open(yaml_path, 'w') as outfile:
+        yaml.dump(data, outfile, default_flow_style=False)
+    
+def write(path, text, end='\n'):
+    """Write in the specified text file."""
+    with open(path, 'a+') as f:
+        f.write(text)
+        f.write(end)
 
 def check_folder(path):
     """Create adequate folders if necessary."""
@@ -50,11 +78,19 @@ def transform(activations, path, name, run_index, n_layers_hidden=13, n_layers_a
 template = '/neurospin/unicog/protocols/IRMf/LePetitPrince_Pallier_2018/LePetitPrince/data/text/english/text_english_run*.txt' # path to text input
 language = 'english'
 saving_path_folder = '/neurospin/unicog/protocols/IRMf/LePetitPrince_Pallier_2018/LePetitPrince/data/stimuli-representations/{}'.format(language)
+nlp = spacy.load("en_core_web_lg")
+nlp.remove_pipe("ner")
+nlp.max_length = np.inf
+english_words_data = pd.read_csv('/neurospin/unicog/protocols/IRMf/LePetitPrince_Pallier_2018/LePetitPrince/data/text/english/lexique_database.tsv', delimiter='\t')
+# Creating dict with freq information
+word_list = english_words_data['Word'].apply(lambda x: str(x).lower()).values
+freq_list = english_words_data['Lg10WF'].values
+zip_freq = zip(word_list, freq_list)
+word_freq = dict(zip_freq)
 
 #### Preprocessing ####
 paths = sorted(glob.glob(template))
 iterator_list = [tokenize(path, language, train=False) for path in paths]
-iterator_list = [[sent.lower() for sent in text] for text in iterator_list]
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser(description='Extract BERT activations')
@@ -67,6 +103,9 @@ if __name__=='__main__':
     parser.add_argument("--number_of_sentence_after", type=int)
     parser.add_argument("--attention_length_before", type=int)
     parser.add_argument("--attention_length_after", type=int)
+    parser.add_argument("--nb_random_sample", type=int, default=0)
+    parser.add_argument("--same_freq", type=bool, default=False)
+    parser.add_argument("--same_syntax", type=bool, default=False)
 
     args = parser.parse_args()
 
@@ -81,9 +120,17 @@ if __name__=='__main__':
     number_of_sentence_after_list = [args.number_of_sentence_after] 
     attention_length_before_list = [args.attention_length_before]
     attention_length_after_list = [args.attention_length_after]
+    nb_random_sample = int(args.nb_random_sample)
+    try:
+        dep_relations_dict = read_yaml('/neurospin/unicog/protocols/IRMf/LePetitPrince_Pallier_2018/LePetitPrince/oldstuff/dependency_parsing/dependency_relations.yml')
+    except:
+        dep_relations_dict = {}
 
     output_attentions = False
     output_hidden_states = True
+    same_freq = args.same_freq
+    same_syntax = args.same_syntax
+    print(same_syntax)
 
     #### Computations ####
 
@@ -103,12 +150,29 @@ if __name__=='__main__':
                                 number_of_sentence_after=number_of_sentence_after_list[index],
                                 )
         print(extractor.name, ' - Extracting activations ...')
-        for run_index, iterator in tqdm(enumerate(iterator_list)):
+        for run_index, iterator in enumerate(iterator_list):
+            iterators = []
+            text = iterator_list[run_index]
+            if nb_random_sample > 0:
+                if same_syntax and same_freq:
+                    samples = [generate_pos_freq_sample(nlp, sentence, dep_relations_dict, n_samples=nb_random_sample, limit_iterations=3000, information_type='tag', use_morph=True, same_freq=True, word_freq=word_freq, skip_punctuation=True) for sentence in text]
+                elif same_freq:
+                    samples = [generate_freq_sample(sentence, n_samples=nb_random_sample, word_list=word_list, word_freq=word_freq, skip_punctuation=True) for sentence in text]
+                iterators = list(zip(*samples))
+                iterators = [[sent.lower() for sent in text] for text in iterators]
+            else:
+                iterators = [[sent.lower() for sent in iterator_list[run_index]]]
+
             gc.collect()
             print("############# Run {} #############".format(run_index + 1))
-            activations  = extractor.extract_activations(iterator, language)
-            hidden_states_activations = activations[0]
-            attention_heads_activations = activations[1]
+            hidden_states_activations = []
+            attention_heads_activations = []
+            for iter_ in tqdm(iterators):
+                activations  = extractor.extract_activations(iter_, language)
+                hidden_states_activations.append(activations[0].values)
+                #attention_heads_activations.append(activations[1].values)
+            hidden_states_activations = pd.DataFrame(np.mean(np.stack(hidden_states_activations, axis=0), axis=0), columns=activations[0].columns)
+            #attention_heads_activations = pd.DataFrame(np.mean(np.stack(attention_heads_activations, axis=0), axis=0), columns=activations[1].columns)
             #(cls_hidden_states_activations, cls_attention_activations) = activations[2]
             #(sep_hidden_states_activations, sep_attention_activations) = activations[3]
             #activations = pd.concat([hidden_states_activations, attention_heads_activations], axis=1)
