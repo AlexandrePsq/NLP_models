@@ -19,6 +19,7 @@ from transformers import BertTokenizer, BertConfig
 
 import bert_utils
 from modeling_hacked_bert import BertModel
+syntax = __import__('04_syntax_generator')
 
 
 class BertExtractor(object):
@@ -344,6 +345,9 @@ class BertExtractor(object):
         sep_hidden_states_activations = []
         cls_attention_activations = []
         sep_attention_activations = []
+        if self.prediction_type=='constituent_parsing':
+            nlp = syntax.set_nlp_pipeline()
+            nlp = syntax.add_constituent_parser(nlp)
         # Here, we give as input the batch of line by batch of line.
         batches, indexes = bert_utils.batchify_per_sentence_with_pre_and_post_context(
             iterator, 

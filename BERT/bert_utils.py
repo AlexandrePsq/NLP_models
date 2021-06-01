@@ -464,7 +464,7 @@ def create_attention_mask(tokenized_text, mapping, index_list, constituent_parsi
                         attention_mask[token_i, token_j] = 1
     return attention_mask
 
-def get_constituent_parsing_list(text, level=1, skip_punctuation=True, incremental=False):
+def get_constituent_parsing_list(text, level=1, skip_punctuation=True, incremental=False, nlp=None):
     """Retrieve the list of words index to which each word in the input text should pay attention too
     based on the constituent parsing tree and the defined level.
     Args:
@@ -475,8 +475,9 @@ def get_constituent_parsing_list(text, level=1, skip_punctuation=True, increment
     Returns:
         - constituent_parsing_list: list (of list of int)
     """
-    nlp = syntax.set_nlp_pipeline()
-    nlp = syntax.add_constituent_parser(nlp)
+    if nlp is None:
+        nlp = syntax.set_nlp_pipeline()
+        nlp = syntax.add_constituent_parser(nlp)
     constituent_parsing_list = syntax.constituent_parsing_at_level(text, nlp, level=level, skip_punctuation=skip_punctuation, incremental=incremental)
     return constituent_parsing_list
 
