@@ -15,7 +15,7 @@ from numpy.lib.npyio import zipfile_factory
 import torch
 import numpy as np
 import pandas as pd
-from transformers import AutoTokenizer, BertConfig
+from transformers import BertTokenizer, BertConfig
 
 import bert_utils
 from modeling_hacked_bert import BertModel
@@ -60,7 +60,7 @@ class BertExtractor(object):
             self.model = BertModel.from_pretrained(pretrained_bert_model, config=configuration) #, config=configuration
         else:
             self.model = BertModel.from_pretrained(pretrained_bert_model) #, config=configuration
-        self.tokenizer = AutoTokenizer.from_pretrained(pretrained_bert_model)
+        self.tokenizer = BertTokenizer.from_pretrained(pretrained_bert_model)
         
         self.language = language
         self.attention_length_before = attention_length_before
