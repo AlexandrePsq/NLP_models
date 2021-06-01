@@ -11,7 +11,6 @@ from tqdm import tqdm
 from model import BertExtractor
 from sklearn.preprocessing import StandardScaler
 from tokenizer import tokenize
-from utils import set_seed
 from numpy import linalg as la
 
 from get_dependency_parsing import generate_pos_freq_sample, generate_freq_sample, filter_list
