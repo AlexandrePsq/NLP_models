@@ -10,12 +10,14 @@ attention heads activations.
 
 import os
 import json
+
+from numpy.lib.npyio import zipfile_factory
 import torch
 import numpy as np
 import pandas as pd
 from transformers import AutoTokenizer, BertConfig
 
-import utils
+import bert_utils
 from modeling_hacked_bert import BertModel
 
 
@@ -44,6 +46,7 @@ class BertExtractor(object):
         stop_attention_before_sent=0,
         tokens_vocabulary=None,
         pos_dictionary=None,
+        constituent_parsing_level=1,
         ):
         super(BertExtractor, self).__init__()
         # Load pre-trained model tokenizer (vocabulary)
@@ -120,7 +123,7 @@ class BertExtractor(object):
             - result: pd.DataFrame containing activation (+ optionally entropy
             and surprisal)
         """
-        utils.set_seed(self.config['seed'])
+        bert_utils.set_seed(self.config['seed'])
         self.model.eval()
         if self.prediction_type in ['sentence', 'token-level']:
             activations = self.get_classic_activations(iterator, language)
@@ -161,7 +164,7 @@ class BertExtractor(object):
         cls_attention_activations = []
         sep_attention_activations = []
         # Here, we give as input the batch of line by batch of line.
-        batches, mappings = utils.batchify_text_with_memory_size(iterator, self.tokenizer, self.attention_length_before, bos='[CLS]', eos='[SEP]')
+        batches, mappings = bert_utils.batchify_text_with_memory_size(iterator, self.tokenizer, self.attention_length_before, bos='[CLS]', eos='[SEP]')
 
         for index, batch in enumerate(batches):
 
@@ -224,7 +227,7 @@ class BertExtractor(object):
         cls_attention_activations = []
         sep_attention_activations = []
         # Here, we give as input the batch of line by batch of line.
-        batches, indexes = utils.batchify_per_sentence_with_pre_and_post_context(
+        batches, indexes = bert_utils.batchify_per_sentence_with_pre_and_post_context(
             iterator, 
             self.config['number_of_sentence'], 
             self.config['number_of_sentence_before'], 
@@ -253,7 +256,7 @@ class BertExtractor(object):
             batch = '[CLS] ' + batch + ' [SEP]'
             tokenized_text = self.tokenizer.wordpiece_tokenizer.tokenize(batch)
             inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
-            mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
+            mapping = bert_utils.match_tokenized_to_untokenized(tokenized_text, batch)
 
             if self.prediction_type=='sentence':
                 attention_mask = torch.tensor([[1 for x in tokenized_text]])
@@ -293,8 +296,8 @@ class BertExtractor(object):
                 # filtration
                 if self.model.config.output_hidden_states:
                     hidden_states_activations_ = np.vstack(encoded_layers[2]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
-                    hidden_states_activations += utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes_tmp[index])
-                    #cls_activations_, sep_activations_ = utils.extract_activations_from_special_tokens(hidden_states_activations_, mapping)
+                    hidden_states_activations += bert_utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes_tmp[index])
+                    #cls_activations_, sep_activations_ = bert_utils.extract_activations_from_special_tokens(hidden_states_activations_, mapping)
                     #cls_hidden_states_activations += cls_activations_
                     #sep_hidden_states_activations += sep_activations_
                 if self.model.config.output_attentions:
@@ -304,8 +307,8 @@ class BertExtractor(object):
                     #                                            inputs_ids.shape[-1], 
                     #                                            self.NUM_ATTENTION_HEADS, 
                     #                                            self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS]).permute(0, 2, 1, 3).contiguous()  for array in encoded_layers[3]])
-                    #attention_heads_activations += utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping, indexes_tmp[index])
-                    ##cls_attention_, sep_attention_ = utils.extract_heads_activations_from_special_tokens(attention_heads_activations_, mapping)
+                    #attention_heads_activations += bert_utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping, indexes_tmp[index])
+                    ##cls_attention_, sep_attention_ = bert_utils.extract_heads_activations_from_special_tokens(attention_heads_activations_, mapping)
                     ##cls_attention_activations += cls_attention_
                     ##sep_attention_activations += sep_attention_
         if self.model.config.output_hidden_states:
@@ -337,7 +340,7 @@ class BertExtractor(object):
         cls_attention_activations = []
         sep_attention_activations = []
         # Here, we give as input the batch of line by batch of line.
-        batches, indexes = utils.batchify_per_sentence_with_pre_and_post_context(
+        batches, indexes = bert_utils.batchify_per_sentence_with_pre_and_post_context(
             iterator, 
             self.config['number_of_sentence'], 
             self.config['number_of_sentence_before'], 
@@ -365,13 +368,18 @@ class BertExtractor(object):
             tokenized_text = self.tokenizer.wordpiece_tokenizer.tokenize(batch)
             inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
             inputs_ids = torch.cat(inputs_ids.size(1) * [inputs_ids])
-            attention_mask =  torch.diag_embed(torch.tensor([[0 for x in tokenized_text]]))
-
-            for i in range(min(len(tokenized_text), self.attention_length_before)):
-                attention_mask = torch.add(attention_mask, torch.diag_embed(torch.tensor([[1 for x in range(len(tokenized_text) - i)]]), offset=-i))
-            for i in range(1, min(len(tokenized_text), self.attention_length_after + 1)):
-                attention_mask = torch.add(attention_mask, torch.diag_embed(torch.tensor([[1 for x in range(len(tokenized_text) - i)]]), offset=i))
-            mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
+            mapping = bert_utils.match_tokenized_to_untokenized(tokenized_text, batch)
+            
+            if self.prediction_type=='constituent_parsing':
+                constituent_parsing_list = bert_utils.get_constituent_parsing_list(batch, level=self.constituent_parsing_level, skip_punctuation=True, incremental=False)
+                attention_mask = bert_utils.create_attention_mask(tokenized_text, mapping, constituent_parsing_list, constituent_parsing_level=self.constituent_parsing_level)
+            elif 'control-context' in self.prediction_type:
+                attention_mask =  torch.diag_embed(torch.tensor([[0 for x in tokenized_text]]))
+                for i in range(min(len(tokenized_text), self.attention_length_before)):
+                    attention_mask = torch.add(attention_mask, torch.diag_embed(torch.tensor([[1 for x in range(len(tokenized_text) - i)]]), offset=-i))
+                for i in range(1, min(len(tokenized_text), self.attention_length_after + 1)):
+                    attention_mask = torch.add(attention_mask, torch.diag_embed(torch.tensor([[1 for x in range(len(tokenized_text) - i)]]), offset=i))
+            
 
             attention_mask = attention_mask.squeeze(0)
 
@@ -400,8 +408,8 @@ class BertExtractor(object):
                     hidden_states_activations_ = np.vstack([torch.cat([encoded_layers[2][layer][i,len(tokenized_text) - encoded_layers[2][layer].size(0) + i - 1,:].unsqueeze(0) for i in range(encoded_layers[2][layer].size(0))], dim=0).unsqueeze(0).detach().numpy() for layer in range(len(encoded_layers[2]))]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
                     hidden_states_activations_ = np.concatenate([np.zeros((hidden_states_activations_.shape[0], indexes_tmp[index_batch][0] + 1 , hidden_states_activations_.shape[-1])), hidden_states_activations_, np.zeros((hidden_states_activations_.shape[0], len(tokenized_text) - indexes_tmp[index_batch][1] - 1, hidden_states_activations_.shape[-1]))], axis=1)
 
-                    hidden_states_activations += utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes_tmp[index_batch])
-                    #cls_activations_, sep_activations_ = utils.extract_activations_from_special_tokens(hidden_states_activations_, mapping)
+                    hidden_states_activations += bert_utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes_tmp[index_batch])
+                    #cls_activations_, sep_activations_ = bert_utils.extract_activations_from_special_tokens(hidden_states_activations_, mapping)
                     #cls_hidden_states_activations += cls_activations_
                     #sep_hidden_states_activations += sep_activations_
                 if self.model.config.output_attentions:
@@ -415,8 +423,8 @@ class BertExtractor(object):
                     #    self.NUM_ATTENTION_HEADS, 
                     #    self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS])
                     #attention_heads_activations_ = np.swapaxes(attention_heads_activations_, 1, 2)
-                    #attention_heads_activations += utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping, indexes_tmp[index_batch])
-                    #cls_attention_, sep_attention_ = utils.extract_heads_activations_from_special_tokens(attention_heads_activations_, mapping)
+                    #attention_heads_activations += bert_utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping, indexes_tmp[index_batch])
+                    #cls_attention_, sep_attention_ = bert_utils.extract_heads_activations_from_special_tokens(attention_heads_activations_, mapping)
                     #cls_attention_activations += cls_attention_
                     #sep_attention_activations += sep_attention_
         if self.model.config.output_hidden_states:
@@ -450,7 +458,7 @@ class BertExtractor(object):
         cls_attention_activations = []
         sep_attention_activations = []
         # Here, a batch is juste a sentence because we cannot create batches of equal length due to the transformation
-        batches, indexes = utils.batchify_sentences(
+        batches, indexes = bert_utils.batchify_sentences(
             iterator, 
             self.config['number_of_sentence'], 
             self.config['number_of_sentence_before'], 
@@ -475,14 +483,14 @@ class BertExtractor(object):
             #print()
             inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
 
-            mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
+            mapping = bert_utils.match_tokenized_to_untokenized(tokenized_text, batch)
 
             with torch.no_grad():
                 encoded_layers = self.model(inputs_ids) # last_hidden_state, pooler_output, hidden_states, attentions
 
                 if self.model.config.output_hidden_states:
                     hidden_states_activations_ = np.vstack(encoded_layers[2]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
-                    hidden_states_activations += utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes[index_batch]) #verify if we have to add 1 to indexes values
+                    hidden_states_activations += bert_utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes[index_batch]) #verify if we have to add 1 to indexes values
 
                 if self.model.config.output_attentions:
                     raise NotImplementedError('Not yet implemented...')

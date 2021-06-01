@@ -18,6 +18,7 @@ from transformers import BertForQuestionAnswering, AdamW, BertConfig, get_linear
 from transformers import BertForNextSentencePrediction, BertForSequenceClassification, BertForTokenClassification
 from transformers import BertTokenizer, BertModel, BertForPreTraining, BertForMaskedLM, WEIGHTS_NAME, CONFIG_NAME
 
+syntax = __import__('04_syntax_generator')
 
 
 #########################################
@@ -207,7 +208,9 @@ def transform_sentence_and_context(
     vocabulary=None,
     dictionary=None,
     select=None,
-    seed=1111):
+    seed=1111,
+    inside_sentence=True
+    ):
     """ Given a list of sentences, for each word, we transform its context outside a certain context window.
     Args:
         - iterator: list (of str)
@@ -220,6 +223,7 @@ def transform_sentence_and_context(
         - batch_tmp: list (of str)
         - index_tmp: list (of tuple of int)
     """
+    raise NotImplementedError
     random.seed(seed)
     punctuation = ['.', '!', '?', '...', '\'', ',', ';', ':', '/', '-', '"', '‘', '’', '(', ')', '{', '}', '[', ']', '`', '“', '”', '—']
     if select is None:
@@ -234,38 +238,41 @@ def transform_sentence_and_context(
 
     # For each word, we compute the index of the other words to transform
     # We transform past context. Change conditions "i<j" and ... to something else if needed
-    index_words_list_before = [[i for i, item in enumerate(all_words) if item not in punctuation if ((i!=(j+len(words_before))) and  (i <= j+len(words_before)-past_context_size-supp_before[j]))] for j in range(len(words))] # '<=' because context_size of 1 is the current word
-    index_words_list_after = [[i for i, item in enumerate(all_words) if item not in punctuation if ((i!=(j+len(words_before))) and (i>j+len(words_before)+future_context_size+supp_after[j]))] for j in range(len(words))] # '<=' because context_size of 1 is the current word
+    if inside_sentence:
+        context = ' '.join([transform_context(sequence, transformation='shuffle', dictionary=dictionary, vocabulary=vocabulary, start_at=None, stop_at=None) for sequence in iterator[:select]])
+    else:
+        index_words_list_before = [[i for i, item in enumerate(all_words) if item not in punctuation if ((i!=(j+len(words_before))) and  (i <= j+len(words_before)-past_context_size-supp_before[j]))] for j in range(len(words))] # '<=' because context_size of 1 is the current word
+        index_words_list_after = [[i for i, item in enumerate(all_words) if item not in punctuation if ((i!=(j+len(words_before))) and (i>j+len(words_before)+future_context_size+supp_after[j]))] for j in range(len(words))] # '<=' because context_size of 1 is the current word
 
-    # Create the new array of sentences with original words 
-    new_words = np.tile(np.array(all_words.copy()), (len(words), 1))
+        # Create the new array of sentences with original words 
+        new_words = np.tile(np.array(all_words.copy()), (len(words), 1))
 
-    for i in range(len(new_words)):
-        if len(index_words_list_before[i])>0: # if there are words to change...
-            if transformation=='shuffle':
-                # Replace words that need to be shuffled by the random sampling (except fix point and punctuation)
-                new_order = random.sample(index_words_list_before[i], len(index_words_list_before[i]))
-                if len(index_words_list_before[i])>1:
-                    while new_order==index_words_list_before[i]:
-                        new_order = random.sample(index_words_list_before[i], len(index_words_list_before[i]))
-                new_words[i, index_words_list_before[i]] = new_words[i, new_order]
-            elif transformation=='pos_replacement':
-                # Replace words that need to be replaced by words with same POS (except fix point and punctuation)
-                new_words[i, index_words_list_before[i]] = pick_pos_word(new_words[i, index_words_list_before[i]], dictionary)
-            elif transformation=='random_replacement':
-                # Replace words that need to be replaced by random words (except fix point and punctuation)
-                new_words[i, index_words_list_before[i]] = pick_random_word(new_words[i, index_words_list_before[i]], vocabulary)
-        if len(index_words_list_after[i])>0: # if there are words to change...
-            if transformation=='shuffle':
-                new_order = random.sample(index_words_list_after[i], len(index_words_list_after[i]))
-                if len(index_words_list_after[i])>1:
-                    while new_order==index_words_list_after[i]:
-                        new_order = random.sample(index_words_list_after[i], len(index_words_list_after[i]))
-                new_words[i, index_words_list_after[i]] = new_words[i, new_order]
-            elif transformation=='pos_replacement':
-                new_words[i, index_words_list_after[i]] = pick_pos_word(new_words[i, index_words_list_after[i]], dictionary)
-            elif transformation=='random_replacement':
-                new_words[i, index_words_list_after[i]] = pick_random_word(new_words[i, index_words_list_after[i]], vocabulary)
+        for i in range(len(new_words)):
+            if len(index_words_list_before[i])>0: # if there are words to change...
+                if transformation=='shuffle':
+                    # Replace words that need to be shuffled by the random sampling (except fix point and punctuation)
+                    new_order = random.sample(index_words_list_before[i], len(index_words_list_before[i]))
+                    if len(index_words_list_before[i])>1:
+                        while new_order==index_words_list_before[i]:
+                            new_order = random.sample(index_words_list_before[i], len(index_words_list_before[i]))
+                    new_words[i, index_words_list_before[i]] = new_words[i, new_order]
+                elif transformation=='pos_replacement':
+                    # Replace words that need to be replaced by words with same POS (except fix point and punctuation)
+                    new_words[i, index_words_list_before[i]] = pick_pos_word(new_words[i, index_words_list_before[i]], dictionary)
+                elif transformation=='random_replacement':
+                    # Replace words that need to be replaced by random words (except fix point and punctuation)
+                    new_words[i, index_words_list_before[i]] = pick_random_word(new_words[i, index_words_list_before[i]], vocabulary)
+            if len(index_words_list_after[i])>0: # if there are words to change...
+                if transformation=='shuffle':
+                    new_order = random.sample(index_words_list_after[i], len(index_words_list_after[i]))
+                    if len(index_words_list_after[i])>1:
+                        while new_order==index_words_list_after[i]:
+                            new_order = random.sample(index_words_list_after[i], len(index_words_list_after[i]))
+                    new_words[i, index_words_list_after[i]] = new_words[i, new_order]
+                elif transformation=='pos_replacement':
+                    new_words[i, index_words_list_after[i]] = pick_pos_word(new_words[i, index_words_list_after[i]], dictionary)
+                elif transformation=='random_replacement':
+                    new_words[i, index_words_list_after[i]] = pick_random_word(new_words[i, index_words_list_after[i]], vocabulary)
 
     # Convert array to list
     new_words = list(new_words)
@@ -435,6 +442,43 @@ def batchify_sentences(
         sentence_count = stop
         
     return batch, indexes
+
+def create_attention_mask(tokenized_text, mapping, index_list, constituent_parsing_level=1):
+    """Create the attention mask associated with the input tokenized text for a given level 
+    in the constituent parsing tree.
+    Args:
+        - tokenized_text: list of int
+        - mapping: dict (resulting from match_tokenized_to_untokenized)
+        - index_list: list (of list of int) e.g.: [[0, 1], [2], [2, 3]]
+        - constituent_parsing_level: int (number of levels to consider in the constituent parsing tree)
+    Returns:
+        - attention_mask: nd.array (dim 2)
+    """
+    n = len(tokenized_text)
+    attention_mask = np.zeros((n, n))
+    for j, key in mapping.keys():
+        for i, v in index_list:
+            if j in v:
+                for token_i in mapping[i]:
+                    for token_j in mapping[j]:
+                        attention_mask[token_i, token_j] = 1
+    return attention_mask
+
+def get_constituent_parsing_list(text, level=1, skip_punctuation=True, incremental=False):
+    """Retrieve the list of words index to which each word in the input text should pay attention too
+    based on the constituent parsing tree and the defined level.
+    Args:
+        - text: str
+        - level: int, level in the parsing tree
+        - skip_punctuation: bool, do not touch punctuation
+        - incremental: bool, masking relations with future words
+    Returns:
+        - constituent_parsing_list: list (of list of int)
+    """
+    nlp = syntax.set_nlp_pipeline()
+    nlp = syntax.add_constituent_parser(nlp)
+    constituent_parsing_list = syntax.constituent_parsing_at_level(text, nlp, level=level, skip_punctuation=skip_punctuation, incremental=incremental)
+    return constituent_parsing_list
 
 
 #########################################

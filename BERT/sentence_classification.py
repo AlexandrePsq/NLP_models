@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, Distr
 
 from dataset import Dataset, InputExample, InputFeatures
 from processors import DataProcessor
-from utils import check_folder
+from bert_utils import check_folder
 
 
 

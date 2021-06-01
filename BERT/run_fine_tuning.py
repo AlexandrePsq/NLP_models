@@ -24,7 +24,7 @@ from transformers import BertForNextSentencePrediction, BertForSequenceClassific
 from transformers import BertTokenizer, BertModel, BertForPreTraining, BertForMaskedLM, WEIGHTS_NAME, CONFIG_NAME
 
 from sentence_classification import SentenceClassificationDataset, SentenceClassificationProcessor
-from utils import read_yaml, set_seed, format_time, filter_args, get_device, save, check_folder, save_yaml
+from bert_utils import read_yaml, set_seed, format_time, filter_args, get_device, save, check_folder, save_yaml
 from token_classification import TokenClassificationDataset, TokenClassificationProcessor
 from processors import DataProcessor, ModelProcessor
 from reporting import Report
