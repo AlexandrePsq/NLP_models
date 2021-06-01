@@ -375,7 +375,7 @@ class BertExtractor(object):
             batch = batch.strip() # Remove trailing character
 
             if self.prediction_type=='constituent_parsing':
-                constituent_parsing_list = bert_utils.get_constituent_parsing_list(batch, level=self.constituent_parsing_level, skip_punctuation=True, incremental=False)
+                constituent_parsing_list = bert_utils.get_constituent_parsing_list(batch, level=self.constituent_parsing_level, skip_punctuation=True, incremental=False, nlp=nlp)
             batch = '[CLS] ' + batch + ' [SEP]'
             tokenized_text = self.tokenizer.wordpiece_tokenizer.tokenize(batch)
             inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
