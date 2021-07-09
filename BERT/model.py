@@ -11,7 +11,6 @@ attention heads activations.
 import os
 import json
 
-from numpy.lib.npyio import zipfile_factory
 import torch
 import numpy as np
 import pandas as pd
@@ -371,7 +370,7 @@ class BertExtractor(object):
                     indexes_tmp.append(None)
         
         for index_batch, batch in enumerate(batches):
-            batch = batch.strip() # Remove trailing character
+            batches[index_batch] = batch.strip() # Remove trailing character
 
             if self.prediction_type=='constituent_parsing':
                 constituent_parsing_list = bert_utils.get_constituent_parsing_list(batch, level=self.constituent_parsing_level, skip_punctuation=True, incremental=False, nlp=nlp)
