@@ -415,8 +415,8 @@ class BertExtractor(object):
                 #                                                       (batch_size, num_heads, sequence_length, sequence_length)]
                 # filtration
                 if self.model.config.output_hidden_states:
-                    hidden_states_activations_ = np.vstack([torch.cat([encoded_layers[2][layer][i,len(tokenized_text) - encoded_layers[2][layer].size(0) + i - 1,:].unsqueeze(0) for i in range(encoded_layers[2][layer].size(0))], dim=0).unsqueeze(0).detach().numpy() for layer in range(len(encoded_layers[2]))]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
-                    hidden_states_activations_ = np.concatenate([np.zeros((hidden_states_activations_.shape[0], indexes_tmp[index_batch][0] + 1 , hidden_states_activations_.shape[-1])), hidden_states_activations_, np.zeros((hidden_states_activations_.shape[0], len(tokenized_text) - indexes_tmp[index_batch][1] - 1, hidden_states_activations_.shape[-1]))], axis=1)
+                    hidden_states_activations_ = np.vstack([torch.cat([encoded_layers[2][layer][i, beg + i, :].unsqueeze(0) for i in range(encoded_layers[2][layer].size(0))], dim=0).unsqueeze(0).detach().numpy() for layer in range(len(encoded_layers[2]))]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
+                    hidden_states_activations_ = np.concatenate([np.zeros((hidden_states_activations_.shape[0], beg , hidden_states_activations_.shape[-1])), hidden_states_activations_, np.zeros((hidden_states_activations_.shape[0], len(tokenized_text) - end, hidden_states_activations_.shape[-1]))], axis=1)
 
                     hidden_states_activations += bert_utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes_tmp[index_batch])
                     #cls_activations_, sep_activations_ = bert_utils.extract_activations_from_special_tokens(hidden_states_activations_, mapping)
