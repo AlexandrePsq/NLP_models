@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from transformers import AutoTokenizer
 
-import utils
+import gpt2_utils
 from modeling_hacked_gpt2 import GPT2Model
 
 
@@ -53,7 +53,7 @@ class GPT2Extractor(object):
         self.NUM_ATTENTION_HEADS = self.model.config.num_attention_heads
         self.name = name
         self.add_prefix_space = add_prefix_space
-        self.config = utils.read_yaml(config_path) if config_path else {'max_length': max_length, 
+        self.config = gpt2_utils.read_yaml(config_path) if config_path else {'max_length': max_length, 
                                                                         'context_length': context_length,
                                                                         'number_of_sentence': number_of_sentence,
                                                                         'number_of_sentence_before': number_of_sentence_before,
@@ -87,7 +87,7 @@ class GPT2Extractor(object):
             - result: pd.DataFrame containing activation (+ optionally entropy
             and surprisal)
         """
-        utils.set_seed()
+        gpt2_utils.set_seed()
         self.model.eval()
         if self.prediction_type in ['sentence', 'token-level']:
             activations = self.get_classic_activations(iterator, language)
@@ -119,7 +119,7 @@ class GPT2Extractor(object):
         #hidden_states_activations = []
         #attention_heads_activations = []
         ## Here, we give as input the batch of line by batch of line.
-        #batches, mappings = utils.batchify_text_with_memory_size(iterator, self.tokenizer, self.attention_length_before, bos='<|endoftext|>', eos='<|endoftext|>')
+        #batches, mappings = gpt2_utils.batchify_text_with_memory_size(iterator, self.tokenizer, self.attention_length_before, bos='<|endoftext|>', eos='<|endoftext|>')
 
         #for index, batch in enumerate(batches):
 
@@ -175,7 +175,7 @@ class GPT2Extractor(object):
         hidden_states_activations = []
         attention_heads_activations = []
         # Here, we give as input the batch of line by batch of line.
-        batches, indexes = utils.batchify_with_detailed_indexes(
+        batches, indexes = gpt2_utils.batchify_with_detailed_indexes(
             iterator, 
             self.config['number_of_sentence'], 
             self.config['number_of_sentence_before'], 
@@ -196,7 +196,7 @@ class GPT2Extractor(object):
             batch = '<|endoftext|> ' + batch + ' <|endoftext|>'
 
             tokenized_text = self.tokenizer.tokenize(batch, add_prefix_space=False)
-            mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
+            mapping = gpt2_utils.match_tokenized_to_untokenized(tokenized_text, batch)
             inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
             
             if self.prediction_type == 'sentence':
@@ -228,10 +228,10 @@ class GPT2Extractor(object):
                 # filtration
                 if self.model.config.output_hidden_states:
                     hidden_states_activations_ = np.vstack(encoded_layers[2]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
-                    hidden_states_activations += utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes_tmp[index])
+                    hidden_states_activations += gpt2_utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes_tmp[index])
                 if self.model.config.output_attentions:
                     attention_heads_activations_ = np.vstack([array[0]  for array in encoded_layers[3]])
-                    attention_heads_activations += utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping, indexes_tmp[index])
+                    attention_heads_activations += gpt2_utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping, indexes_tmp[index])
         if self.model.config.output_hidden_states:
             hidden_states_activations = pd.DataFrame(np.vstack(hidden_states_activations), columns=['hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
         if self.model.config.output_attentions:
@@ -247,7 +247,7 @@ class GPT2Extractor(object):
         hidden_states_activations = []
         attention_heads_activations = []
         # Here, we give as input the batch of line by batch of line.
-        batches, indexes = utils.batchify_with_detailed_indexes(
+        batches, indexes = gpt2_utils.batchify_with_detailed_indexes(
             iterator, 
             self.config['number_of_sentence'], 
             self.config['number_of_sentence_before'], 
@@ -266,7 +266,7 @@ class GPT2Extractor(object):
             batch = '<|endoftext|> ' + batch + ' <|endoftext|>'
 
             tokenized_text = self.tokenizer.tokenize(batch, add_prefix_space=False)
-            mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
+            mapping = gpt2_utils.match_tokenized_to_untokenized(tokenized_text, batch)
             
             beg = indexes_tmp[index_batch][0] 
             end = indexes_tmp[index_batch][1] 
@@ -293,13 +293,13 @@ class GPT2Extractor(object):
                     hidden_states_activations_ = np.vstack([torch.cat([encoded_layers[2][layer][i,len(tokenized_text) - encoded_layers[2][layer].size(0) + i - 1,:].unsqueeze(0) for i in range(encoded_layers[2][layer].size(0))], dim=0).unsqueeze(0).detach().numpy() for layer in range(len(encoded_layers[2]))])
                     hidden_states_activations_ = np.concatenate([np.zeros((hidden_states_activations_.shape[0], indexes_tmp[index_batch][0] , hidden_states_activations_.shape[-1])), hidden_states_activations_, np.zeros((hidden_states_activations_.shape[0], len(tokenized_text) - indexes_tmp[index_batch][1], hidden_states_activations_.shape[-1]))], axis=1)
                     # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
-                    hidden_states_activations += utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes_tmp[index_batch])
+                    hidden_states_activations += gpt2_utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes_tmp[index_batch])
 
                 if self.model.config.output_attentions:
                     raise NotImplementedError('Not yet implemented...')
                     #attention_heads_activations_ = np.vstack([torch.cat([encoded_layers[-1][layer][0][i,:,i,:].unsqueeze(0) for i in range(len(tokenized_text))], dim=0).unsqueeze(0).detach().numpy() for layer in range(len(encoded_layers[-1]))])
                     #attention_heads_activations_ = np.swapaxes(attention_heads_activations_, 1, 2)
-                    #attention_heads_activations += utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping, indexes_tmp[index_batch])
+                    #attention_heads_activations += gpt2_utils.extract_heads_activations_from_token_activations(attention_heads_activations_, mapping, indexes_tmp[index_batch])
         if self.model.config.output_hidden_states:
             hidden_states_activations = pd.DataFrame(np.vstack(hidden_states_activations), columns=['hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
         if self.model.config.output_attentions:
@@ -320,7 +320,7 @@ class GPT2Extractor(object):
         hidden_states_activations = []
         attention_heads_activations = []
         # Here, a batch is juste a sentence because we cannot create batches of equal length due to the transformation
-        batches, indexes = utils.batchify_sentences(
+        batches, indexes = gpt2_utils.batchify_sentences(
             iterator, 
             self.config['number_of_sentence'], 
             self.config['number_of_sentence_before'], 
@@ -343,14 +343,14 @@ class GPT2Extractor(object):
             #print()
             inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
 
-            mapping = utils.match_tokenized_to_untokenized(tokenized_text, batch)
+            mapping = gpt2_utils.match_tokenized_to_untokenized(tokenized_text, batch)
 
             with torch.no_grad():
                 encoded_layers = self.model(inputs_ids) # last_hidden_state, pooler_output, hidden_states, attentions
 
                 if self.model.config.output_hidden_states:
                     hidden_states_activations_ = np.vstack(encoded_layers[2]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
-                    hidden_states_activations += utils.extract_activations_from_token_activations_special(hidden_states_activations_, mapping, indexes[index_batch]) #verify if we have to add 1 to indexes values
+                    hidden_states_activations += gpt2_utils.extract_activations_from_token_activations_special(hidden_states_activations_, mapping, indexes[index_batch]) #verify if we have to add 1 to indexes values
 
                 if self.model.config.output_attentions:
                     raise NotImplementedError('Not yet implemented...')

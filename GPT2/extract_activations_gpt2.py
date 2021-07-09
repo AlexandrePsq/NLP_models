@@ -9,7 +9,7 @@ from tqdm import tqdm
 from model import GPT2Extractor
 from sklearn.preprocessing import StandardScaler
 from tokenizer import tokenize
-from utils import set_seed
+from gpt2_utils import set_seed
 from numpy import linalg as la
 
 

@@ -13,44 +13,10 @@ from sklearn.preprocessing import StandardScaler
 from tokenizer import tokenize
 from numpy import linalg as la
 
-from get_dependency_parsing import generate_pos_freq_sample, generate_freq_sample, filter_list
+syntax = __import__('04_syntax_generator')
+import utils
 
 #### Functions ####
-
-
-def read_yaml(yaml_path):
-    """Open and read safely a yaml file."""
-    with open(yaml_path, 'r') as stream:
-        try:
-            parameters = yaml.safe_load(stream)
-        except :
-            print("Couldn't load yaml file: {}.".format(yaml_path))
-            quit()
-    return parameters
-
-def save_yaml(data, yaml_path):
-    """Open and write safely in a yaml file.
-    Arguments:
-        - data: list/dict/str/int/float
-        -yaml_path: str
-    """
-    with open(yaml_path, 'w') as outfile:
-        yaml.dump(data, outfile, default_flow_style=False)
-    
-def write(path, text, end='\n'):
-    """Write in the specified text file."""
-    with open(path, 'a+') as f:
-        f.write(text)
-        f.write(end)
-
-def check_folder(path):
-    """Create adequate folders if necessary."""
-    try:
-        if not os.path.isdir(path):
-            check_folder(os.path.dirname(path))
-            os.mkdir(path)
-    except:
-        pass
 
 def transform(activations, path, name, run_index, n_layers_hidden=13, n_layers_attention=12, hidden_size=768):
     assert activations.values.shape[1] == (n_layers_hidden + n_layers_attention) * hidden_size
@@ -69,7 +35,7 @@ def transform(activations, path, name, run_index, n_layers_hidden=13, n_layers_a
         matrices = np.hstack(matrices)
         new_data = pd.DataFrame(matrices, columns=activations.columns)
         new_path = path + '_norm-' + str(order).replace('np.', '')
-        check_folder(new_path)
+        utils.check_folder(new_path)
         new_data.to_csv(os.path.join(new_path, name + '_run{}.csv'.format(run_index + 1)), index=False)
 
 
@@ -77,9 +43,8 @@ def transform(activations, path, name, run_index, n_layers_hidden=13, n_layers_a
 template = '/neurospin/unicog/protocols/IRMf/LePetitPrince_Pallier_2018/LePetitPrince/data/text/english/text_english_run*.txt' # path to text input
 language = 'english'
 saving_path_folder = '/neurospin/unicog/protocols/IRMf/LePetitPrince_Pallier_2018/LePetitPrince/data/stimuli-representations/{}'.format(language)
-nlp = spacy.load("en_core_web_lg")
-nlp.remove_pipe("ner")
-nlp.max_length = np.inf
+nlp = syntax.set_nlp_pipeline()
+
 english_words_data = pd.read_csv('/neurospin/unicog/protocols/IRMf/LePetitPrince_Pallier_2018/LePetitPrince/data/text/english/lexique_database.tsv', delimiter='\t')
 # Creating dict with freq information
 word_list = english_words_data['Word'].apply(lambda x: str(x).lower()).values
@@ -105,6 +70,7 @@ if __name__=='__main__':
     parser.add_argument("--nb_random_sample", type=int, default=0)
     parser.add_argument("--same_freq", type=bool, default=False)
     parser.add_argument("--same_syntax", type=bool, default=False)
+    parser.add_argument("--constituent_parsing_level", type=int, default=0)
 
     args = parser.parse_args()
 
@@ -120,6 +86,7 @@ if __name__=='__main__':
     attention_length_before_list = [args.attention_length_before]
     attention_length_after_list = [args.attention_length_after]
     nb_random_sample = int(args.nb_random_sample)
+    constituent_parsing_level = args.constituent_parsing_level
     try:
         dep_relations_dict = read_yaml('/neurospin/unicog/protocols/IRMf/LePetitPrince_Pallier_2018/LePetitPrince/oldstuff/dependency_parsing/dependency_relations.yml')
     except:
@@ -129,7 +96,6 @@ if __name__=='__main__':
     output_hidden_states = True
     same_freq = args.same_freq
     same_syntax = args.same_syntax
-    print(same_syntax)
 
     #### Computations ####
 
@@ -147,18 +113,32 @@ if __name__=='__main__':
                                 number_of_sentence=number_of_sentence_list[index], 
                                 number_of_sentence_before=number_of_sentence_before_list[index], 
                                 number_of_sentence_after=number_of_sentence_after_list[index],
+                                constituent_parsing_level=constituent_parsing_level,
                                 )
         print(extractor.name, ' - Extracting activations ...')
         for run_index, iterator in enumerate(iterator_list):
             iterators = []
             text = iterator_list[run_index]
             if nb_random_sample > 0:
-                if same_syntax and same_freq:
-                    samples = [generate_pos_freq_sample(nlp, sentence, dep_relations_dict, n_samples=nb_random_sample, limit_iterations=3000, information_type='tag', use_morph=True, same_freq=True, word_freq=word_freq, skip_punctuation=True) for sentence in text]
-                elif same_freq:
-                    samples = [generate_freq_sample(sentence, n_samples=nb_random_sample, word_list=word_list, word_freq=word_freq, skip_punctuation=True) for sentence in text]
-                iterators = list(zip(*samples))
-                iterators = [[sent.lower() for sent in text] for text in iterators]
+                samples = generate_sample(
+                                nlp, 
+                                [sentence], 
+                                word_list, 
+                                nb_words_samples=5, 
+                                same_freq=True, 
+                                same_pos=False, 
+                                same_tag=False, 
+                                same_dep=False, 
+                                same_morph=False, 
+                                same_parent_tag=True,
+                                use_children=False, 
+                                verify_syntactic_tree=False, 
+                                skip_punctuation=True, 
+                                word_freq=word_freq, 
+                                filtering_dict=filtering_dict
+                            )
+                #iterators = list(zip(*samples))
+                #iterators = [[sent.lower() for sent in text] for text in iterators]
             else:
                 iterators = [[sent.lower() for sent in iterator_list[run_index]]]
 
@@ -178,8 +158,8 @@ if __name__=='__main__':
             #cls_activations = pd.concat([cls_hidden_states_activations, cls_attention_activations], axis=1)
             #sep_activations = pd.concat([sep_hidden_states_activations, sep_attention_activations], axis=1)
 
-            check_folder(saving_path_folders[index])
-            hidden_states_activations.to_csv(os.path.join(saving_path_folders[index], 'activations_run{}.csv'.format(run_index + 1)), index=False)
+            #utils.check_folder(saving_path_folders[index])
+            #hidden_states_activations.to_csv(os.path.join(saving_path_folders[index], 'activations_run{}.csv'.format(run_index + 1)), index=False)
             transform(
                 hidden_states_activations, 
                 saving_path_folders[index], 
