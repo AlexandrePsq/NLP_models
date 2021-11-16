@@ -1,28 +1,25 @@
-import sys
 import os
+import sys
+import time
+import math
+import argparse
+from tqdm import tqdm
 
-root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if root not in sys.path:
-    sys.path.append(root)
-
+import numpy as np
+import pandas as pd
 
 import torch
 import torch.nn as nn
-import math
-import pandas as pd
-import numpy as np
-import time
-from .data import Corpus
-from tqdm import tqdm
-from utilities.settings import Params, Paths
-from .model import RNNModel
-from .utils import get_batch, repackage_hidden, batchify, save, load
+
+from data import Corpus
+from modeling_hacked_lstm import RNNModel
+from lstm_utils import get_batch, repackage_hidden, batchify, save, load, get_preference_params, read_yaml, save_yaml
+
 import matplotlib.pyplot as plt
 plt.switch_backend('agg')
 
-params = Params()
-paths = Paths()
-
+params = get_preference_params()
+path2derivatives = '/neurospin/unicog/protocols/IRMf/LePetitPrince_Pallier_2018/LePetitPrince/derivatives'
 
 
 ###############################################################################
@@ -35,8 +32,8 @@ def evaluate(model, criterion, ntokens, data_source, eval_batch_size):
     total_loss = 0.
     hidden = model.init_hidden(eval_batch_size)
     with torch.no_grad():
-        for i in tqdm(range(0, data_source.size(0) - 1, params.pref.bptt)):
-            data, targets = get_batch(data_source, i)
+        for i in tqdm(range(0, data_source.size(0) - 1, params['bptt'])):
+            data, targets = get_batch(data_source, i, params['bptt'])
             output, hidden = model(data, hidden)
             output_flat = output.view(-1, ntokens)
             total_loss += len(data) * criterion(output_flat, targets).item()
@@ -49,15 +46,15 @@ def evaluate(model, criterion, ntokens, data_source, eval_batch_size):
 # Training code
 ###############################################################################
 
-def forward(model, train_data, corpus, criterion, epoch, lr, bsz=params.pref.bsz):
+def forward(model, train_data, corpus, criterion, epoch, lr, bsz=params['bsz']):
     # Turn on training mode which enables dropout.
     model.train()
     total_loss = 0.
     start_time = time.time()
     ntokens = len(corpus.dictionary)
-    hidden = model.init_hidden(params.pref.bsz)
-    for batch, i in tqdm(enumerate(range(0, train_data.size(0) - 1, params.pref.bptt))):
-        data, targets = get_batch(train_data, i)
+    hidden = model.init_hidden(params['bsz'])
+    for batch, i in tqdm(enumerate(range(0, train_data.size(0) - 1, params['bptt']))):
+        data, targets = get_batch(train_data, i, params['bptt'])
         # Starting each batch, we detach the hidden state from how it was previously produced.
         # If we didn't, the model would try backpropagating all the way to start of the dataset.
         hidden = repackage_hidden(hidden)
@@ -67,26 +64,26 @@ def forward(model, train_data, corpus, criterion, epoch, lr, bsz=params.pref.bsz
         loss.backward()
 
         # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
-        torch.nn.utils.clip_grad_norm_(model.parameters(), params.pref.clip)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), params['clip'])
         for p in model.parameters():
             p.data.add_(-lr, p.grad.data)
 
         total_loss += loss.item()
 
-        if batch % params.pref.log_interval == 0 and batch > 0:
-            cur_loss = total_loss / params.pref.log_interval
+        if batch % params['log_interval'] == 0 and batch > 0:
+            cur_loss = total_loss / params['log_interval']
             elapsed = time.time() - start_time
             print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.2f} | ms/batch {:5.2f} | '
                     'loss {:5.2f} | ppl {:8.2f}'.format(
-                epoch, batch, len(train_data) // params.pref.bptt, lr,
-                elapsed * 1000 / params.pref.log_interval, cur_loss, math.exp(cur_loss)))
+                epoch, batch, len(train_data) // params['bptt'], lr,
+                elapsed * 1000 / params['log_interval'], cur_loss, math.exp(cur_loss)))
             total_loss = 0
             start_time = time.time()
 
 
-def train(model, data, data_name, language, eval_batch_size=params.pref.eval_batch_size, bsz=params.pref.bsz, epochs=params.pref.epochs):
-    torch.manual_seed(params.pref.seed) # setting seed for reproductibility
-    device = torch.device("cuda" if params.cuda else "cpu")
+def train(config_path, data, data_name, language, eval_batch_size=params['eval_batch_size'], bsz=params['bsz'], epochs=params['epochs'], start_from_scratch=False, extra_name=''):
+    torch.manual_seed(params['seed']) # setting seed for reproductibility
+    device = torch.device("cuda" if params['cuda'] else "cpu")
     corpus = Corpus(data, language)
     train_data = batchify(corpus.train, bsz, device)
     val_data = batchify(corpus.valid, eval_batch_size, device)
@@ -94,12 +91,21 @@ def train(model, data, data_name, language, eval_batch_size=params.pref.eval_bat
 
     # Build the model
     ntokens = len(corpus.dictionary)
-    param = model.param
-    param['ntoken'] = ntokens
-    model = RNNModel(**param)
+    model_parameters = read_yaml(config_path)
+    model_parameters['ntoken'] = ntokens
+    save_yaml(model_parameters, config_path)
+    model = RNNModel(**model_parameters)
     #model.encoder.num_embeddings = ntokens
     #model.decoder.out_features = ntokens
     model.vocab = corpus.dictionary
+    try:
+        print('loading best saved model...')
+        if start_from_scratch:
+            raise ValueError
+        else:
+            model = load(model, data_name, language, path2derivatives, extra_name=extra_name)
+    except:
+        print("Couldn't load pre-trained model...")
     model = model.to(device)
     print(model)
 
@@ -108,7 +114,7 @@ def train(model, data, data_name, language, eval_batch_size=params.pref.eval_bat
     # Loop over epochs.
     best_val_loss = None
     best_epoch = None
-    lr = params.pref.lr
+    lr = params['lr']
     valid_ppl = []
 
     # At any point you can hit Ctrl + C to break out of training early.
@@ -117,6 +123,8 @@ def train(model, data, data_name, language, eval_batch_size=params.pref.eval_bat
         for epoch in tqdm(range(1, epochs+4)):
             if epoch == epochs + 1: # we added 3 more epoch with a smaller lr for tuning
                 lr /= 4.0
+            if (epoch % 5 ==0) and epoch > 0:
+                lr /= 2.0
             epoch_start_time = time.time()
             forward(model, train_data, corpus, criterion, epoch, lr)
             val_loss = evaluate(model, criterion, ntokens, val_data, eval_batch_size)
@@ -128,7 +136,7 @@ def train(model, data, data_name, language, eval_batch_size=params.pref.eval_bat
             print('-' * 89)
             # Save the model if the validation loss is the best we've seen so far.
             if not best_val_loss or val_loss < best_val_loss:
-                save(model, data_name, language)
+                save(model, data_name, language, path2derivatives, extra_name=extra_name)
                 best_val_loss = val_loss
                 best_epoch = epoch
             else:
@@ -140,7 +148,7 @@ def train(model, data, data_name, language, eval_batch_size=params.pref.eval_bat
 
     # Load the best saved model.
     print('loading best saved model...')
-    model = load(model, data_name, language)
+    model = load(model, data_name, language, path2derivatives, extra_name=extra_name)
     # after load the rnn params are not a continuous chunk of memory
     # this makes them a continuous chunk, and will speed up forward pass
     model.rnn.flatten_parameters()
@@ -155,8 +163,8 @@ def train(model, data, data_name, language, eval_batch_size=params.pref.eval_bat
 
     # plot the perplexity as a function of the number of epochs
     print(valid_ppl)
-    ppl_df = pd.DataFrame.from_items([('ppl', valid_ppl)])
-    ppl_df.to_csv(os.path.join(paths.path2derivatives, 'fMRI', 'models', language, '{}_perplexity.csv'.format(model.__name__())))
+    ppl_df = pd.DataFrame(valid_ppl, columns=['ppl'])
+    ppl_df.to_csv(os.path.join(path2derivatives, 'fMRI', 'models', language, '{}_{}_perplexity.csv'.format(model.__name__(), extra_name)))
     plt.plot(valid_ppl, color='b', linestyle='-')
     plt.ylim(0,100)
     plt.axvline(x=best_epoch, color='r', linestyle='--', label='best epoch: {}'.format(best_epoch))
@@ -165,4 +173,22 @@ def train(model, data, data_name, language, eval_batch_size=params.pref.eval_bat
     plt.xlabel('epoch number')
     plt.ylabel('validation perplexity')
     plt.legend()
-    plt.savefig(os.path.join(paths.path2derivatives, 'fMRI', 'models', language, '{}_perplexity.png'.format(model.__name__())))
+    plt.savefig(os.path.join(path2derivatives, 'fMRI', 'models', language, '{}_{}_{}_perplexity.png'.format(model.__name__(), data_name, extra_name)))
+    
+    
+    
+    
+if __name__=='__main__':
+    parser = argparse.ArgumentParser(description='Train LSTM model.')
+    parser.add_argument("--language", type=str, default='english')
+    parser.add_argument("--data_name", type=str)
+    parser.add_argument("--config_path", type=str)
+    parser.add_argument("--data_folder_path", type=str)
+    parser.add_argument("--start_from_scratch", action='store_true')
+    parser.add_argument("--extra_name", type=str, default='')
+
+    args = parser.parse_args()
+    start_from_scratch = args.start_from_scratch if args.start_from_scratch is not None else False
+    
+    train(args.config_path, data=args.data_folder_path, data_name=args.data_name, language=args.language, start_from_scratch=start_from_scratch, extra_name=args.extra_name)
+    print('--> Done')

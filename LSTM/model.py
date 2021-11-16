@@ -17,18 +17,25 @@ import numpy as np
 from data import Corpus, Dictionary
 from tokenizer import tokenize
 from modeling_hacked_lstm import RNNModel
-import utils
+import lstm_utils as utils
 
 
 
 class LSTMExtractor(object):
     """Container module with an encoder, a recurrent module, and a decoder."""
 
-    def __init__(self, config_path, language, name='', prediction_type='sequential', output_hidden_states=False, memory_size=np.inf):
+    def __init__(self, config_path, language, name='', prediction_type='sequential', output_hidden_states=False, memory_size=np.inf, randomize=False, seed=1111):
         super().__init__()
         
         assert memory_size > 0
-        self.model = RNNModel.from_pretrained(config_path, output_hidden_states=output_hidden_states)
+        utils.set_seed(seed)
+        if randomize:
+            parameters = utils.read_yaml(config_path)
+            self.model = RNNModel(output_hidden_states=output_hidden_states, **parameters)
+            if output_hidden_states:
+                self.model.rnn.forward = lambda input, hidden: utils.forward(self.model.rnn, input, hidden, self.model.param)
+        else:
+            self.model = RNNModel.from_pretrained(config_path, output_hidden_states=output_hidden_states)
         self.tokenizer = tokenize
         
         self.language = language
@@ -65,10 +72,13 @@ class LSTMExtractor(object):
         entropies = []
         # Initialiazing variables
         out = None
+        correction = 0
         
         final_iterator = iterator if self.memory_size==np.inf else utils.batchify_text_with_memory_size(iterator, self.memory_size)
 
         for index, item in tqdm(enumerate(final_iterator)):
+            
+            index += correction # correcting for <eos> symbols that should not be retrieved
 
             if index % self.memory_size == 0:
                 hidden = self.model.init_hidden(1)
@@ -81,9 +91,12 @@ class LSTMExtractor(object):
             activation, surprisal, entropy, (out, hidden) = self.model.extract(item, out=out, hidden=hidden, parameters=parameters)
 
             if ((index + 1) % self.memory_size == 0) or (self.memory_size==np.inf) or (index < self.memory_size): # +1 because we look if the hidden state is reset at the next word
-                activations.append(activation)
-                surprisals.append(surprisal)
-                entropies.append(entropy)
+                if item=='<eos>':
+                    correction -= 1
+                else:
+                    activations.append(activation)
+                    surprisals.append(surprisal)
+                    entropies.append(entropy)
 
         activations_df = pd.DataFrame(np.vstack(activations), columns=columns_activations)
         surprisals_df = pd.DataFrame(np.vstack(surprisals), columns=['surprisal'])

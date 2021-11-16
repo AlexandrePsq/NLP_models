@@ -16,7 +16,7 @@ import pandas as pd
 import numpy as np
 from data import Corpus, Dictionary
 from tokenizer import tokenize
-import utils
+import lstm_utils as utils
 
 
 
@@ -38,7 +38,7 @@ class RNNModel(nn.Module):
             self.rnn = nn.RNN(ninp, nhid, nlayers, nonlinearity=nonlinearity, dropout=dropout)
         self.decoder = nn.Linear(nhid, ntoken)
         # hack the forward function to send an extra argument containing the model parameters
-	    # self.rnn.forward = lambda input, hidden: lstm.forward(model.rnn, input, hidden)
+        # self.rnn.forward = lambda input, hidden: lstm.forward(model.rnn, input, hidden)
 
         # Optionally tie weights as in:
         # "Using the Output Embedding to Improve Language Models" (Press & Wolf 2016)
@@ -123,7 +123,10 @@ class RNNModel(nn.Module):
         else:
             raise ValueError("{} doesn't exists.".format(path))
         model = cls(**parameters)
-        model.load_state_dict(torch.load(parameters['weights_path']))
+        try:
+            model.load_state_dict(torch.load(parameters['weights_path']))
+        except:
+            model.load_state_dict(torch.load(parameters['weights_path']).state_dict())
         if output_hidden_states:
             model.rnn.forward = lambda input, hidden: utils.forward(model.rnn, input, hidden, model.param)
         return model

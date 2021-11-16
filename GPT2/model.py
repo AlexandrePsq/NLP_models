@@ -6,13 +6,14 @@ attention heads activations.
 """
 
 import os
+import json
 import torch
 import numpy as np
 import pandas as pd
-from transformers import AutoTokenizer
+from transformers import GPT2Tokenizer, GPT2Config
 
 import gpt2_utils
-from modeling_hacked_gpt2 import GPT2Model
+from modeling_hacked_gpt2 import GPT2Model, GPT2LMHeadModel
 
 
 class GPT2Extractor(object):
@@ -33,18 +34,32 @@ class GPT2Extractor(object):
         context_length=250, 
         number_of_sentence=1, 
         number_of_sentence_before=0,
-        stop_attention_at_sent=None,
+        stop_attention_at_sent_before=None,
         stop_attention_before_sent=0,
         add_prefix_space=True,
         tokens_vocabulary=None,
         pos_dictionary=None,
+        prediction=False,
+        randomize=False
         ):
         super(GPT2Extractor, self).__init__()
-        self.tokenizer = AutoTokenizer.from_pretrained(pretrained_gpt2_model)
-        self.model = GPT2Model.from_pretrained(pretrained_gpt2_model, 
-                                                output_hidden_states=output_hidden_states, 
-                                                output_attentions=output_attentions,
-                                                pad_token_id=self.tokenizer.eos_token_id)
+        self.tokenizer = GPT2Tokenizer.from_pretrained(pretrained_gpt2_model)
+        gpt2_utils.set_seed(seed)
+        if randomize:
+            parameters = gpt2_utils.read_yaml(config_path)
+            parameters['layer_norm_epsilon'] = float(parameters['layer_norm_epsilon'])
+            self.model = GPT2Model(GPT2Config(**parameters, pad_token_id=self.tokenizer.eos_token_id))
+            
+        elif prediction:
+            self.model = GPT2LMHeadModel.from_pretrained(pretrained_gpt2_model, 
+                                                    output_hidden_states=output_hidden_states, 
+                                                    output_attentions=output_attentions,
+                                                    pad_token_id=self.tokenizer.eos_token_id)
+        else:
+            self.model = GPT2Model.from_pretrained(pretrained_gpt2_model, 
+                                                    output_hidden_states=output_hidden_states, 
+                                                    output_attentions=output_attentions,
+                                                    pad_token_id=self.tokenizer.eos_token_id)
         self.language = language
         self.attention_length_before = attention_length_before
         self.pretrained_gpt2_model = pretrained_gpt2_model
@@ -53,17 +68,20 @@ class GPT2Extractor(object):
         self.NUM_ATTENTION_HEADS = self.model.config.num_attention_heads
         self.name = name
         self.add_prefix_space = add_prefix_space
-        self.config = gpt2_utils.read_yaml(config_path) if config_path else {'max_length': max_length, 
-                                                                        'context_length': context_length,
-                                                                        'number_of_sentence': number_of_sentence,
-                                                                        'number_of_sentence_before': number_of_sentence_before,
-                                                                        'attention_length_before': attention_length_before,
-                                                                        'stop_attention_at_sent': stop_attention_at_sent, 
-                                                                        'stop_attention_before_sent': stop_attention_before_sent,
-                                                                        'tokens_vocabulary': tokens_vocabulary,
-                                                                        'pos_dictionary': pos_dictionary,
-                                                                        'seed': seed,
-                                                                        }
+        self.config = {'max_length': max_length, 
+                        'context_length': context_length,
+                        'number_of_sentence': number_of_sentence,
+                        'number_of_sentence_before': number_of_sentence_before,
+                        'attention_length_before': attention_length_before,
+                        'stop_attention_at_sent_before': stop_attention_at_sent_before, 
+                        'stop_attention_before_sent': stop_attention_before_sent,
+                        'tokens_vocabulary': tokens_vocabulary,
+                        'pos_dictionary': pos_dictionary,
+                        'seed': seed,
+                        }
+        if config_path is not None:
+            parameters = gpt2_utils.read_yaml(config_path)
+            self.config.update(parameters)
         self.prediction_type = prediction_type # ['sentence', 'token-level']
 
     def __name__(self):
@@ -89,7 +107,7 @@ class GPT2Extractor(object):
         """
         gpt2_utils.set_seed()
         self.model.eval()
-        if self.prediction_type in ['sentence', 'token-level']:
+        if self.prediction_type in ['sentence', 'sentence-level']:
             activations = self.get_classic_activations(iterator, language)
 
         elif 'control-context' in self.prediction_type:
@@ -181,8 +199,6 @@ class GPT2Extractor(object):
             self.config['number_of_sentence_before'], 
             self.pretrained_gpt2_model, 
             max_length=self.config['max_length'],
-            stop_attention_at_sent=self.config['stop_attention_at_sent'],
-            stop_attention_before_sent=self.config['stop_attention_before_sent'],
             add_prefix_space=self.add_prefix_space
             )
         indexes_tmp = [(indexes[i][-self.config['number_of_sentence']][0], indexes[i][-1][1]) for i in range(len(indexes))]
@@ -201,22 +217,11 @@ class GPT2Extractor(object):
             
             if self.prediction_type == 'sentence':
                 attention_mask = torch.tensor([[1 for x in tokenized_text]])
-
-                if (self.config['stop_attention_at_sent'] is not None) and (index > 0):
-                    attention_mask[:, : indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]] = 0
-                    if self.config['stop_attention_before_sent'] < 0:
-                        attention_mask[:, 1 + indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]: 1 + indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]-self.config['stop_attention_before_sent']] = 0
-                    elif self.config['stop_attention_before_sent'] > 0:
-                        attention_mask[:, 1 + indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]-self.config['stop_attention_before_sent']: 1 + indexes[index][-self.config['stop_attention_at_sent']-self.config['number_of_sentence']][0]] = 1
-                        
-            elif 'token-level' in self.prediction_type:
-                attention_mask =  torch.diag_embed(torch.tensor([0 for x in tokenized_text]))
-                for i in range(min(len(tokenized_text), self.attention_length_before)):
-                    attention_mask = torch.add(attention_mask, torch.diag_embed(torch.tensor([1 for x in range(len(tokenized_text) - i)]), offset=-i))
-                attention_mask = attention_mask.unsqueeze(0)
-                if 'reverse' in self.prediction_type:
-                    attention_mask = 1 - attention_mask
-                               
+                
+            elif self.prediction_type=='sentence-level':
+                attention_mask = torch.tensor([[1 for x in tokenized_text]])
+                attention_mask[0, : 1+indexes[index][-self.config['stop_attention_at_sent_before']:][0][0]] = 0 # +1 because of special token
+              
             with torch.no_grad():
                 encoded_layers = self.model(inputs_ids, attention_mask=attention_mask) # last_hidden_state, pooler_output, hidden_states, attentions
                 # last_hidden_state dimension: (batch_size, sequence_length, hidden_size)

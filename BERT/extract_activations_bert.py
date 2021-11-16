@@ -60,6 +60,8 @@ if __name__=='__main__':
     parser = argparse.ArgumentParser(description='Extract BERT activations')
     parser.add_argument("--model", type=str)
     parser.add_argument("--name", type=str)
+    parser.add_argument("--seed", type=int, default=1111)
+    parser.add_argument("--randomize", type=bool, default=False)
     parser.add_argument("--config_path", type=str)
     parser.add_argument("--prediction_type", type=str)
     parser.add_argument("--number_of_sentence", type=int)
@@ -71,12 +73,15 @@ if __name__=='__main__':
     parser.add_argument("--same_freq", type=bool, default=False)
     parser.add_argument("--same_syntax", type=bool, default=False)
     parser.add_argument("--constituent_parsing_level", type=int, default=0)
+    parser.add_argument("--stop_attention_at_sent_before", type=int)
 
     args = parser.parse_args()
 
 
     pretrained_bert_models = [args.model]
     names = [args.name]
+    seed = args.seed
+    randomize = args.randomize
     config_paths = [args.config_path]
     saving_path_folders = [os.path.join(saving_path_folder, args.name)]
     prediction_types = [args.prediction_type]
@@ -87,6 +92,7 @@ if __name__=='__main__':
     attention_length_after_list = [args.attention_length_after]
     nb_random_sample = int(args.nb_random_sample)
     constituent_parsing_level = args.constituent_parsing_level
+    stop_attention_at_sent_before_list = [args.stop_attention_at_sent_before]
     try:
         dep_relations_dict = read_yaml('/neurospin/unicog/protocols/IRMf/LePetitPrince_Pallier_2018/LePetitPrince/oldstuff/dependency_parsing/dependency_relations.yml')
     except:
@@ -110,10 +116,13 @@ if __name__=='__main__':
                                 attention_length_after=attention_length_after_list[index],
                                 config_path=config_paths[index], 
                                 max_length=512, 
+                                seed=seed,
+                                randomize=randomize,
                                 number_of_sentence=number_of_sentence_list[index], 
                                 number_of_sentence_before=number_of_sentence_before_list[index], 
                                 number_of_sentence_after=number_of_sentence_after_list[index],
                                 constituent_parsing_level=constituent_parsing_level,
+                                stop_attention_at_sent_before=stop_attention_at_sent_before_list[index],
                                 )
         print(extractor.name, ' - Extracting activations ...')
         for run_index, iterator in enumerate(iterator_list):

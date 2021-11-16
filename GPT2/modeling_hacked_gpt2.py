@@ -24,29 +24,29 @@ import torch.nn as nn
 import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from ...activations import ACT2FN
-from ...file_utils import (
+from transformers.activations import ACT2FN
+from transformers.file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import (
+from transformers.modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     SequenceClassifierOutputWithPast,
 )
-from ...modeling_utils import (
+from transformers.modeling_utils import (
     Conv1D,
     PreTrainedModel,
     SequenceSummary,
     find_pruneable_heads_and_indices,
     prune_conv1d_layer,
 )
-from ...utils import logging
-from ...utils.model_parallel_utils import assert_device_map, get_device_map
-from .configuration_gpt2 import GPT2Config
+from transformers.utils import logging
+from transformers.utils.model_parallel_utils import assert_device_map, get_device_map
+from transformers.models.gpt2.configuration_gpt2 import GPT2Config
 
 
 logger = logging.get_logger(__name__)
@@ -975,12 +975,13 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
+            loss_fct = CrossEntropyLoss(reduction='none')
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+            loss = loss.view(shift_logits.size(0), shift_logits.size(1))
 
         if not return_dict:
             output = (lm_logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
+            return ((loss, shift_logits, shift_labels, loss_fct, ) + output) if loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
             loss=loss,

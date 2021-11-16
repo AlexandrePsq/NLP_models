@@ -16,7 +16,26 @@ from collections import defaultdict
 
 import torch.nn.functional as F
 
+#########################################
+########## Training parameters ##########
+#########################################
 
+def get_preference_params():
+    """Default parameters for LSTM training.
+    """
+    result = {
+        'seed': 1111,
+        'eval_batch_size': 128,
+        'bsz': 128,
+        'bptt': 35, # sequence length,
+        'clip': 0.25, # gradient clipping,
+        'log_interval': 400, # report interval,
+        'lr': 20, # learning rate,
+        'epochs': 20,
+        'shift_surprisal': 0,
+        'cuda': torch.cuda.is_available()
+    }    
+    return result
 
 #########################################
 ############ Basic functions ############
@@ -146,15 +165,15 @@ def batchify_text_with_memory_size(iterator, memory_size):
     return final_iterator
 
 
-def save(model, data_name, language, path2derivatives):
-    path = '_'.join([model.__name__(), data_name, language]) + '.pt'
+def save(model, data_name, language, path2derivatives, extra_name=''):
+    path = '_'.join([model.__name__(), data_name, language]) + f'{extra_name}.pt'
     path = os.path.join(path2derivatives, 'fMRI/models', language, path)
     with open(path, 'wb') as f:
         torch.save(model, f)
 
 
-def load(model, data_name, language, path2derivatives):
-    path = '_'.join([model.__name__(), data_name, language]) + '.pt'
+def load(model, data_name, language, path2derivatives, extra_name=''):
+    path = '_'.join([model.__name__(), data_name, language]) + f'{extra_name}.pt'
     path = os.path.join(path2derivatives, 'fMRI/models', language, path)
     assert os.path.exists(path)
     with open(path, 'rb') as f:

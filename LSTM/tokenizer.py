@@ -216,13 +216,13 @@ def tokenize(path, language, train=False, vocab=None):
     if os.path.exists(path):
         path = open(path, 'r', encoding='utf8').read()
 
-    if not train:
-        text = preprocess(path, special_words, language)
-    else:
-        text = path
+    text = preprocess(path, special_words, language)
     # iterator = [unk_transform(item, vocab).lower() for item in text.split()]
-    iterator_ = [item for item in tqdm(text.split('\n')[:-1])] # vocab words not lowered
-    iterator = [unk_transform(word, vocab) for item in tqdm(iterator_) for word in item.strip().split(' ')]
+    if train:
+        iterator = [unk_transform(word, vocab) for word in tqdm(text.split(' '))]
+    else:
+        iterator_ = [item for item in tqdm(text.split('\n')[:-1])] # vocab words not lowered
+        iterator = [unk_transform(word, vocab) for item in tqdm(iterator_) for word in item.strip().split(' ')]
     return iterator
 
 
@@ -251,11 +251,11 @@ def preprocess(text, special_words, language):
         text = text.replace(item, ' '+ item + ' ')
     text = text.replace('...', '<3 points>')
     for item in eos_punctuation:
-        text = text.replace(item, ' '+ item + '\n')
-    text = text.replace('<3 points>', ' ...\n')
+        text = text.replace(item, ' '+ item + ' <eos>\n')
+    text = text.replace('<3 points>', ' ... <eos>\n')
     for item in eos_punctuation + ['...']:
-        text = text.replace(item + '\n' + ' ' + '”', item + ' ' + '”' + '\n')
-        text = text.replace(item + '\n' + ' ' + '’', item + ' ' + '’' + '\n')
+        text = text.replace(item + ' <eos>\n' + ' ' + '”', item + ' ' + '”' + ' <eos>\n')
+        text = text.replace(item + ' <eos>\n' + ' ' + '’', item + ' ' + '’' + ' <eos>\n')
     text = re.sub(' +', ' ', text)
     #for word in words2replace[language].keys():
     #    text = text.replace(' ' + word + ' ', ' ' + words2replace[language][word] + ' ')
@@ -274,11 +274,11 @@ def preprocess(text, special_words, language):
 def unk_transform(word, vocab=None):
     if word == 'unk':
         return '<unk>'
-    elif not vocab:
+    elif (vocab is None):
         return word
-    elif word in vocab.idx2word:
+    elif (word in vocab.idx2word) or word=='<eos>\n':
         return word
     else:
-        print(word)
+        #print(word)
         return '<unk>'
 

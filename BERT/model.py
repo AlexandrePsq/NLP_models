@@ -18,7 +18,10 @@ from transformers import BertTokenizer, BertConfig
 
 import bert_utils
 from modeling_hacked_bert import BertModel
+
 syntax = __import__('04_syntax_generator')
+bert_utils2 = __import__('06_bert')
+
 
 
 class BertExtractor(object):
@@ -47,11 +50,17 @@ class BertExtractor(object):
         tokens_vocabulary=None,
         pos_dictionary=None,
         constituent_parsing_level=1,
+        randomize=False
         ):
         super(BertExtractor, self).__init__()
         # Load pre-trained model tokenizer (vocabulary)
         # Crucially, do not do basic tokenization; PTB is tokenized. Just do wordpiece tokenization.
-        if config_path is None:
+        bert_utils.set_seed(seed)
+        if randomize:
+            parameters = bert_utils.read_yaml(config_path)
+            self.model = BertModel(BertConfig(**parameters))
+            #bert_utils2.randomize_model(self.model)
+        elif config_path is None:
             configuration = BertConfig()
             configuration.hidden_dropout_prob = hidden_dropout_prob
             configuration.attention_probs_dropout_prob = attention_probs_dropout_prob
@@ -61,7 +70,7 @@ class BertExtractor(object):
         else:
             self.model = BertModel.from_pretrained(pretrained_bert_model) #, config=configuration
         self.tokenizer = BertTokenizer.from_pretrained(pretrained_bert_model)
-        
+            
         self.language = language
         self.attention_length_before = attention_length_before
         self.attention_length_after = attention_length_after
@@ -127,7 +136,7 @@ class BertExtractor(object):
         """
         bert_utils.set_seed(self.config['seed'])
         self.model.eval()
-        if self.prediction_type in ['sentence', 'token-level']:
+        if self.prediction_type in ['sentence', 'sentence-level']:
             activations = self.get_classic_activations(iterator, language)
             
         elif 'control-context' in self.prediction_type:
@@ -238,9 +247,7 @@ class BertExtractor(object):
             self.config['number_of_sentence_before'], 
             self.config['number_of_sentence_after'], 
             self.pretrained_bert_model, 
-            max_length=self.config['max_length'],
-            stop_attention_before_sent=self.config['stop_attention_before_sent'],
-            stop_attention_at_sent_before=self.config['stop_attention_at_sent_before']
+            max_length=self.config['max_length']
         )
         
         indexes_tmp = []
@@ -265,31 +272,10 @@ class BertExtractor(object):
 
             if self.prediction_type=='sentence':
                 attention_mask = torch.tensor([[1 for x in tokenized_text]])
-
-                if (self.config['stop_attention_at_sent_before'] is not None) and (index > 0) and not (type(indexes[index])==list and type(indexes[index][0])==list):
-                    start_index = 1 if (index > self.config['number_of_sentence_before'] - self.config['stop_attention_at_sent_before'] - self.config['number_of_sentence']) else 0
-                    attention_mask[:, :start_index + indexes[index][-self.config['stop_attention_at_sent_before']-self.config['number_of_sentence']-self.config['number_of_sentence_after']][0]] = 0
-                    if self.config['stop_attention_before_sent'] < 0:
-                        attention_mask[:, start_index + indexes[index][-self.config['stop_attention_at_sent_before']-self.config['number_of_sentence']-self.config['number_of_sentence_after']][0]: 1 + indexes[index][-self.config['stop_attention_at_sent_before']-self.config['number_of_sentence']-self.config['number_of_sentence_after']][0]-self.config['stop_attention_before_sent']] = 0
-                    elif self.config['stop_attention_before_sent'] > 0:
-                        attention_mask[:, start_index + indexes[index][-self.config['stop_attention_at_sent_before']-self.config['number_of_sentence']-self.config['number_of_sentence_after']][0]-self.config['stop_attention_before_sent']: 1 + indexes[index][-self.config['stop_attention_at_sent_before']-self.config['number_of_sentence']-self.config['number_of_sentence_after']][0]] = 1
-                elif (self.config['stop_attention_at_sent_before'] is not None) and index > 0:
-                    start_index = 1 if (index > self.config['number_of_sentence_before'] - self.config['stop_attention_at_sent_before'] - self.config['number_of_sentence']) else 0
-                    attention_mask[:, :start_index + indexes[index][0][-self.config['stop_attention_at_sent_before']-self.config['number_of_sentence']-self.config['number_of_sentence_after']][0]] = 0
-                    if self.config['stop_attention_before_sent'] < 0:
-                        attention_mask[:, start_index + indexes[index][0][-self.config['stop_attention_at_sent_before']-self.config['number_of_sentence']-self.config['number_of_sentence_after']][0]: 1 + indexes[index][0][-self.config['stop_attention_at_sent_before']-self.config['number_of_sentence']-self.config['number_of_sentence_after']][0]-self.config['stop_attention_before_sent']] = 0
-                    elif self.config['stop_attention_before_sent'] > 0:
-                        attention_mask[:, start_index + indexes[index][0][-self.config['stop_attention_at_sent_before']-self.config['number_of_sentence']-self.config['number_of_sentence_after']][0]-self.config['stop_attention_before_sent']: 1 + indexes[index][0][-self.config['stop_attention_at_sent_before']-self.config['number_of_sentence']-self.config['number_of_sentence_after']][0]] = 1
-
-            elif self.prediction_type=='token-level':
-                attention_mask =  torch.diag_embed(torch.tensor([0 for x in tokenized_text]))
-                for i in range(min(len(tokenized_text), self.attention_length_before)):
-                    attention_mask = torch.add(attention_mask, torch.diag_embed(torch.tensor([1 for x in range(len(tokenized_text) - i)]), offset=-i))
-                for i in range(1, min(len(tokenized_text), self.attention_length_after + 1)):
-                    attention_mask = torch.add(attention_mask, torch.diag_embed(torch.tensor([1 for x in range(len(tokenized_text) - i)]), offset=i))
-
-                attention_mask = attention_mask.unsqueeze(0)
-            
+            elif self.prediction_type=='sentence-level':
+                attention_mask = torch.tensor([[1 for x in tokenized_text]])
+                attention_mask[0, : 1+indexes[index][0][-self.config['stop_attention_at_sent_before']:][0][0]] = 0# +1 because of special token
+                                          
             with torch.no_grad():
                 encoded_layers = self.model(inputs_ids, attention_mask=attention_mask) # last_hidden_state, pooler_output, hidden_states, attentions
                 # last_hidden_state dimension: (batch_size, sequence_length, hidden_size)
