@@ -482,7 +482,7 @@ def extract_activations_from_token_activations(activation, mapping, indexes):
     for key_, value in mapping.items(): 
         if indexes[0] in value:
             key = key_ 
-    for word_index in range(key, len(mapping.keys()) - 1):
+    for word_index in range(key, len(mapping.keys()) - 2): # -2 because '<|endoftext|>' is divided into ['Ġ', '<|endoftext|>']
         word_activation = []
         word_activation.append([activation[:,index, :] for index in mapping[word_index]])
         word_activation = np.vstack(word_activation)

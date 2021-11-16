@@ -309,18 +309,18 @@ class BertSelfAttention(nn.Module):
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
         ##### control context: apply masking before softmax
-        #if attention_mask is not None:
-        #    # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
-        #    attention_scores = attention_scores + attention_mask
+        if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+            attention_scores = attention_scores + attention_mask
         #####
         
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
 
         ##### control context: apply masking after softmax
-        if attention_mask is not None:
-            attention_mask = torch.div(attention_mask, 10000) + 1.0
-            attention_probs = torch.mul(attention_probs, attention_mask)
+        #if attention_mask is not None:
+        #    attention_mask = torch.div(attention_mask, 10000) + 1.0
+        #    attention_probs = torch.mul(attention_probs, attention_mask)
         #####
 
         # This is actually dropping out entire tokens to attend to, which might
