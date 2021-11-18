@@ -178,7 +178,7 @@ class LMProcessor(DataProcessor):
         data = TensorDataset(input_ids, attention_mask, token_type_ids, label_ids)
         if set_type=='train':
             if local_rank == -1:
-                sampler = RandomSampler(data)
+                sampler = RandomSampler(data, num_samples=len(data))
             else:
                 sampler = DistributedSampler(data)
         else:

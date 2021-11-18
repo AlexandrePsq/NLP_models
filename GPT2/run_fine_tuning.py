@@ -54,7 +54,7 @@ if __name__=='__main__':
     logging.info("\tDone.")
 
     logging.info("Set and retrieve the device on which to run...")
-    device = 'cpu' #get_device()
+    device = get_device()
     print("CAREFUL device manually put to CPU")
     task = parameters['task'].lower()
     logging.info("\tDone.")
