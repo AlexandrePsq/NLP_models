@@ -9,7 +9,7 @@
 
 
 # General
-task: ner # Task on which to fine-tune the model ['POS-tagging', 'NER', 'sentiment-analysis', 'sentence-classification']
+task: ner # Task on which to fine-tune the model ['POS-tagging', 'NER', 'sentiment-analysis', 'sentence-classification', 'mask-language-modeling]
 seed: 1111 # Seed for reproductibility
 output_dir: ./NER_CONLL2003_bert_base_cased
 log_file: logs.txt

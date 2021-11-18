@@ -19,11 +19,12 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 
+from tokenizers import ByteLevelBPETokenizer
 from transformers import AdamW, GPT2Config, get_linear_schedule_with_warmup
-from transformers import GPT2Tokenizer, GPT2Model, GPT2LMHeadModel, WEIGHTS_NAME, CONFIG_NAME
+from transformers import GPT2Tokenizer, GPT2Model, GPT2LMHeadModel, WEIGHTS_NAME, CONFIG_NAME, GPT2Config
 
 from language_modeling import LMDataset, LMProcessor
-from utils import read_yaml, set_seed, format_time, filter_args, get_device, save, check_folder, save_yaml
+from gpt2_utils import read_yaml, set_seed, format_time, filter_args, get_device, save, check_folder, save_yaml
 from processors import DataProcessor, ModelProcessor
 from reporting import Report
 from dataset import Dataset
@@ -53,14 +54,15 @@ if __name__=='__main__':
     logging.info("\tDone.")
 
     logging.info("Set and retrieve the device on which to run...")
-    device = get_device()
+    device = 'cpu' #get_device()
+    print("CAREFUL device manually put to CPU")
     task = parameters['task'].lower()
     logging.info("\tDone.")
 
     logging.info("Instanciating dataset and data processor...")
-    if task in ['language_modeling']:
+    if task in ['language-modeling']:
         data = LMDataset(task, parameters['dataset_name'].lower(), dataset_dir=parameters['dataset_dir'])
-        processor = LMProcessor()
+        processor = LMProcessor(parameters['max_length'], device=device)
     logging.info("\tDone.")
 
     logging.info("Fetching data (training + validation) and parameters...")
@@ -71,18 +73,37 @@ if __name__=='__main__':
         data.process_dataset('test')
     logging.info("\tDone.")
 
-    logging.info("Fetching pre-trained GPT-2 model: {} and Tokenizer: {} for the task: {}...".format(parameters['pretrained_model'],
-                                                                                                    parameters['pretrained_tokenizer'],
-                                                                                                    parameters['task']))
-    if task in ['language_modeling']:
-        model = GPT2LMHeadModel.from_pretrained(
-                    parameters['pretrained_model'],
-                    output_attentions=parameters['output_attentions'], # Whether the model returns attentions weights.
-                    output_hidden_states=parameters['output_hidden_states'], # Whether the model returns all hidden-states.
-        )
-    tokenizer = GPT2Tokenizer.from_pretrained(parameters['pretrained_tokenizer'])
+    logging.info("Fetching pre-trained GPT-2 model: {} and Tokenizer: {} for the task: {}...".format(parameters['pretrained_model'],parameters['pretrained_tokenizer'],parameters['task']))
+    if task in ['language-modeling']:
+        if parameters['start_from_scratch']:
+            params = read_yaml(parameters['config_path'])
+            params['layer_norm_epsilon'] = float(params['layer_norm_epsilon'])
+            model = GPT2LMHeadModel(GPT2Config(**params))
+        else:
+            model = GPT2LMHeadModel.from_pretrained(
+                        parameters['pretrained_model'],
+                        output_attentions=parameters['output_attentions'], # Whether the model returns attentions weights.
+                        output_hidden_states=parameters['output_hidden_states'], # Whether the model returns all hidden-states.
+            )
+    if parameters['tokenizer_from_scratch']:
+        tokenizer = ByteLevelBPETokenizer( 
+                        lowercase=parameters['lowercase'])
+        files = [os.path.join(parameters['dataset_dir'], item) for item in ['train.txt', 'test.txt', 'dev.txt']]
+        tokenizer.train( 
+                        files, 
+                        vocab_size=parameters['vocab_size'], 
+                        min_frequency=parameters['min_frequency'], 
+                        show_progress=True, 
+                        special_tokens=["<s>", "<pad>", "</s>", "<unk>", "<mask>"])
+        tokenizer.enable_truncation(max_length=512)
+        tokenizer.save_model(parameters['output_dir'], parameters['dataset_name'] + 'tokenizer')
+        processor.set_tokenizer(tokenizer)
+    else:
+        tokenizer = GPT2Tokenizer.from_pretrained(parameters['pretrained_tokenizer'])
 
     model.to(device)
+    # Setting environment for the tokenizer not to interefere with future parallelisation
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
     logging.info("\tDone.")
 
     logging.info("Get input examples...")

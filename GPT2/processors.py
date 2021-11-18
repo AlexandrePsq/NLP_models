@@ -3,11 +3,10 @@ import time
 import torch
 import numpy as np
 from tqdm import tqdm
-from utils import format_time
 
 from dataset import Dataset, InputExample, InputFeatures
 from metrics import Metrics
-from utils import save
+from gpt2_utils import save, format_time
 
 
 
@@ -83,7 +82,8 @@ class ModelProcessor(object):
         # `batch` contains three pytorch tensors:
         #   [0]: input ids 
         #   [1]: attention masks
-        #   [2]: labels 
+        #   [2]: token type ids 
+        #   [3]: labels 
         input_ids = batch[0].to(self.device)
         attention_mask = batch[1].to(self.device)
         token_type_ids = batch[2].to(self.device)
@@ -122,7 +122,7 @@ class ModelProcessor(object):
 
         # Measure the total training time for the whole run.
         total_t0 = time.time()
-        save_step = self.nb_epochs * len(train_dataloader) // self.nb_checkpoints
+        save_step = max(1, self.nb_epochs * len(train_dataloader) // self.nb_checkpoints)
 
         # For each epoch...
         for epoch_i in range(0, self.nb_epochs):
@@ -147,12 +147,15 @@ class ModelProcessor(object):
                 if step != 0 and step % save_step == 0:
                     save(self.model, self.tokenizer, output_dir, 'checkpoint_' + str(checkpoints_index))
                     checkpoints_index += 1
-                # Progress update every 40 batches.
-                if step % 50 == 0 and not step == 0:
+                # Progress update every 50 batches.
+                if step % min(50, save_step) == 0 and not step == 0:
                     # Calculate elapsed time in minutes.
                     elapsed = format_time(time.time() - t0)
                     # Report progress.
-                    print('  Batch {:>5,}  of  {:>5,}.    Elapsed: {:}.'.format(step, len(train_dataloader), elapsed))
+                    lr = vars(self.optimizer)['param_groups'][0]['lr']
+                    print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.2f}e-5 | ms/batch {} | '
+                    'loss {:5.2f} | ppl {:8.2f}'.format(epoch_i, step, len(train_dataloader), lr*10**5, elapsed, total_train_loss-tmp, math.exp(total_train_loss-tmp))) # / :5.2f
+                tmp = total_train_loss if step>0 else 0
                 total_train_loss = self.training_step(batch, total_train_loss)
 
             # Calculate the average loss over all of the batches.
@@ -163,7 +166,7 @@ class ModelProcessor(object):
             print("\n  Average training loss: {0:.2f}".format(avg_train_loss))
             print("  Training epcoh took: {:}".format(training_time))
                 
-            avg_val_accuracy, avg_val_loss, validation_time = self.evaluate(validation_dataloader)        
+            avg_val_accuracy, avg_val_loss, validation_time, report = self.evaluate(validation_dataloader)        
 
             # Record all statistics from this epoch.
             training_stats.append(
@@ -173,7 +176,8 @@ class ModelProcessor(object):
                     'Valid. Loss': avg_val_loss,
                     'Valid. Accur.': avg_val_accuracy,
                     'Training Time': training_time,
-                    'Validation Time': validation_time
+                    'Validation Time': validation_time,
+                    'report': report,
                 }
             )
         print("\nTraining complete!")
@@ -231,18 +235,18 @@ class ModelProcessor(object):
                 active_loss = (active_loss == 1)
             pred_flat = np.argmax(logits, axis=-1)[active_loss].flatten()
             labels_flat = label_ids[active_loss].flatten()
-            #y_true.append(labels_flat)
-            #y_pred.append(pred_flat)
+            y_true.append(labels_flat)
+            y_pred.append(pred_flat)
 
             # Calculate the accuracy for this batch of test sentences, and
             # accumulate it over all batches.
             total_eval_loss += loss
 
         # Report results
-        #report = Metrics.report(self.metric_name, 
-        #                        [item for sublist in y_true for item in sublist], 
-        #                        [item for sublist in y_pred for item in sublist])
-        #print(report)
+        report = Metrics.report(self.metric_name, 
+                                [item for sublist in y_true for item in sublist], 
+                                [item for sublist in y_pred for item in sublist])
+        print(report)
         # Report the final accuracy for this validation run.
         avg_val_accuracy = total_eval_accuracy / len(dataloader)
         print("  Accuracy: {0:.2f}".format(avg_val_accuracy))
@@ -255,5 +259,5 @@ class ModelProcessor(object):
         
         print("  Validation Loss: {0:.2f}".format(avg_val_loss))
         print("  Validation took: {:}".format(validation_time))
-        return avg_val_accuracy, avg_val_loss, validation_time
+        return avg_val_accuracy, avg_val_loss, validation_time, report
             

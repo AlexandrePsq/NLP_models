@@ -66,7 +66,7 @@ def forward(model, train_data, corpus, criterion, epoch, lr, bsz=params['bsz']):
         # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
         torch.nn.utils.clip_grad_norm_(model.parameters(), params['clip'])
         for p in model.parameters():
-            p.data.add_(-lr, p.grad.data)
+            p.data.add_(p.grad.data, alpha=-lr)
 
         total_loss += loss.item()
 

@@ -124,7 +124,7 @@ def save(model, tokenizer, output_dir, index):
     model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
     torch.save(model_to_save.state_dict(), output_model_file)
     model_to_save.config.to_json_file(output_config_file)
-    tokenizer.save_pretrained(output_dir)
+    #tokenizer.save_pretrained(output_dir)
 
 
 def pick_random_word(words, vocabulary):

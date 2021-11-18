@@ -41,6 +41,13 @@ def get_preference_params():
 ############ Basic functions ############
 #########################################
 
+def write(path, text, end='\n'):
+    """Write in the specified text file."""
+    with open(path, 'a+') as f:
+        f.write(text)
+        f.write(end)
+        
+
 def check_folder(path):
     """Create adequate folders if necessary."""
     try:

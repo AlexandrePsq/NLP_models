@@ -2,9 +2,11 @@
 """
 
 import os
+import glob
 import wget
 import torch
-import glob
+import random
+import numpy as np
 import pandas as pd
 from tqdm import tqdm
 import multiprocessing
@@ -14,71 +16,44 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, Distr
 
 from dataset import Dataset, InputExample, InputFeatures
 from processors import DataProcessor
-from gpt2_utils import check_folder, set_seed
-from tokenizer import tokenize
-
+from bert_utils import check_folder
 from joblib import Parallel, delayed
 
 
+class MLMDataset(Dataset):
+    """Class for MLM dataset fetching and formatting."""
 
-class LMDataset(Dataset):
-    """Class for language modeling dataset fetching and formatting."""
-
-    def __init__(self, task_name, dataset_name, dataset_dir=None, url=None, language='english'):
-        super(LMDataset, self).__init__(task_name, dataset_name, dataset_dir, url)
-        self.language = language
+    def __init__(self, task_name, dataset_name, dataset_dir=None, url=None):
+        super(MLMDataset, self).__init__(task_name, dataset_name, dataset_dir, url)
 
     def _fetch_dataset(self):
-        """Fetch sentence classification dataset."""
-        if not os.path.exists(self.dataset_dir):
-            check_folder(self.dataset_dir)
-            if self.dataset_name=='lpp':
-                pass
+        """Fetch MLM dataset."""
+        assert os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}train.txt'))
+        assert os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}test.txt'))
+        assert os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}dev.txt'))
     
     def process_dataset(self, set_type):
-        if self.dataset_name=='lpp':
-            self.process_lpp(set_type)
-        else:
-            self.process_gutenberg(set_type)
-            print(f"Using default Gutenberg dataset {set_type} {self.dataset_name}...")
-    
-    def process_gutenberg(self, set_type):
-        """Process Gutenberg dataset.
-        The result is an iterator of tuples (sentence, label)."""
-        self.train = open(os.path.join(self.dataset_dir, f'{self.dataset_name}train.txt'), 'r').read().lower().split(' \n ')[:100]
-        self.test = open(os.path.join(self.dataset_dir, f'{self.dataset_name}test.txt'), 'r').read().lower().split(' \n ')[:100]
-        self.dev = open(os.path.join(self.dataset_dir, f'{self.dataset_name}dev.txt'), 'r').read().lower().split(' \n ')[:100]
+        self.process_mlm_dataset(set_type)
 
-    def process_lpp(self, set_type):
-        """Process LPP dataset.
-        The result is an iterator of tuples (sentence, label)."""
-        set_seed()
-        _file = 'text_english_run*.txt'
-        path_to_data = os.path.join(self.dataset_dir, _file)
-        files = sorted(glob.glob(path_to_data))
-        iterator_list = [tokenize(path, self.language, train=False) for path in files]
-        iterator = [item for sub_l in iterator_list for item in sub_l]
-        sentences = iterator.copy()
-        labels = [None] * len(sentences)
-        data = zip(sentences, labels)
-        if set_type=='train':
-            self.train = list(data).copy()
-        elif set_type=='test':
-            self.test = list(data).copy()
-        elif set_type=='dev':
-            self.dev = list(data).copy()
-    
+    def process_mlm_dataset(self, set_type):
+        """Process CoNLL2003 dataset.
+        Be careful that the last line of your train/dev/test files is an empty line."""
+        self.train = open(os.path.join(self.dataset_dir, f'{self.dataset_name}train.txt'), 'r').read().lower().split(' \n ')
+        self.test = open(os.path.join(self.dataset_dir, f'{self.dataset_name}test.txt'), 'r').read().lower().split(' \n ')
+        self.dev = open(os.path.join(self.dataset_dir, f'{self.dataset_name}dev.txt'), 'r').read().lower().split(' \n ')
+            
     def get_labels(self):
         """ Returns possible labels for the task.
         """
-        raise NotImplementedError()
+        return []
 
 
-class LMProcessor(DataProcessor):
-    """Processor for language modeling."""
-    
-    def __init__(self, max_seq_length, device='cpu'):
+class MLMProcessor(DataProcessor):
+    """Processor for the MLM data set."""
+              
+    def __init__(self, max_seq_length, masking_proportion=15, device='cpu'):
         self.max_seq_length = max_seq_length
+        self.masking_proportion = masking_proportion
         self.device = device
 
     def get_train_examples(self, dataset_object):
@@ -92,10 +67,24 @@ class LMProcessor(DataProcessor):
     def get_test_examples(self, dataset_object):
         """See base class."""
         return self._create_examples(dataset_object.test, "test")
-    
-    def set_tokenizer(self, tokenizer):
-        """Set processor tokenizer."""
-        self.tokenizer = tokenizer
+
+    def mask_tokens(self, sequence):
+        """Mask a given proportion of sequence tokens."""
+        n_tokens = len(sequence)
+        n_masked_tokens = int(self.masking_proportion*n_tokens/100)
+        indexes = [random.randint(0, n_tokens-1) for i in range(n_masked_tokens)]
+        while len(set(indexes))!=n_masked_tokens:
+              indexes = [random.randint(0, n_tokens-1) for i in range(n_masked_tokens)]
+        sequence = np.array(sequence)
+        sequence[indexes] = 4
+        return list(sequence)
+              
+    def pad_to_max_length(self, sequence):
+        """Pad sequence to reach max_seq_length"""
+        sequence = sequence[:self.max_seq_length]
+        n = len(sequence)
+        #return sequence + ['[PAD]'] * (self.max_seq_length - n)
+        return sequence + [0] *(self.max_seq_length - n)
 
     def _create_examples(self, lines, set_type):
         """Returns list of InputExample objects."""
@@ -107,29 +96,27 @@ class LMProcessor(DataProcessor):
         def g(lines, i, step):
             return self.tokenizer.encode(' '.join(lines[i:i + step])).ids
         
-        batches = Parallel(n_jobs=-1)(delayed(g)(lines, i, step) for i in tqdm(range(0, n, step))) #'<|endoftext|> '
+        batches = Parallel(n_jobs=-1)(delayed(g)(lines, i, step) for i in tqdm(range(0, n, step)))
 
         def f(i, sequence):
             guid = "%s-%s" % (set_type, i)
-            text_a = self.pad_to_max_length([2] + sequence + [3])
+            text_a = self.pad_to_max_length([2] + self.mask_tokens(sequence) + [3])
             text_b = None
-            label = text_a
+            label = self.pad_to_max_length([2] + sequence + [3])
             example = InputExample(guid=guid,text_a=text_a,text_b=text_b,label=label)
             return example
         
         examples = Parallel(n_jobs=-1)(delayed(f)(i, sequence) for i, sequence in tqdm(enumerate(batches)))
         
         return examples
-    
-    def pad_to_max_length(self, sequence):
-        """Pad sequence to reach max_seq_length"""
-        sequence = sequence[:self.max_seq_length]
-        n = len(sequence)
-        #return sequence + ['[PAD]'] * (self.max_seq_length - n)
-        return sequence + [0] *(self.max_seq_length - n)
-    
-    def batchify(self, iterator):
+              
+    def set_tokenizer(self, tokenizer):
+        """Set processor tokenizer."""
+        self.tokenizer = tokenizer
+              
+    def batchify(self, i, iterator):
         """Batchify list of sentences."""
+        print(f'Starting Batch {i}')
         iterator = [item.strip() for item in iterator]
         max_length = self.max_seq_length - 2 # for special tokens
 
@@ -145,18 +132,30 @@ class LMProcessor(DataProcessor):
                 index_stop += 1
             while (len(self.tokenizer.encode(' '.join(iterator[index_start:index_stop+1])).tokens) < max_length) and (index_stop<n):
                 index_stop += 1
-            batches.append(iterator[index_start:index_stop+1])
+            batches.append(iterator[index_start:index_stop])
             index_start = index_stop
-
+        print(f'Batch {i} Done')
         return batches
     
-    def convert_examples_to_features(self, examples, max_seq_length, tokenizer):
-        """Loads a data file into a list of `InputBatch`s.  
+    def convert_examples_to_features(self, examples, label_list, max_seq_length, tokenizer):
+        """Loads a data file into a list of `InputBatch`s.
+        Arguments:
+            - label_list is discarded
+        Returns:
+            - input_ids: ids of ntokens + padding.
+                e.g.: [103, 1023, 6423, 896, 102, 0, 0]
+            - attention_mask: mask, 1 for tokens and 0 for padding.
+                e.g.: [1, 1, 1, 1, 1, 0, 0]
+            - token_type_ids: vector of 0.
+                e.g.:[0, 0, 0, 0, 0, 0, 0]
+            - label_ids: ids of the labels (there is 1 label for each word
+            piece) + 0-padding
+                e.g.: [1, 4, 4, 5, 2, 0, 0]
         """
         
         def f(example):
-            labels_ids = torch.FloatTensor(example.label).unsqueeze(0).to(torch.int64).to(self.device)[1:]
-            input_ids = torch.FloatTensor(example.text_a).unsqueeze(0).to(torch.int64).to(self.device)[:-1]
+            labels_ids = torch.FloatTensor(example.label).unsqueeze(0).to(torch.int64).to(self.device)
+            input_ids = torch.FloatTensor(example.text_a).unsqueeze(0).to(torch.int64).to(self.device)
             attention_mask = torch.ones(input_ids.size()).to(torch.int64).to(self.device)
             token_type_ids = torch.zeros(input_ids.size()).to(torch.int64).to(self.device)
             return InputFeatures(input_ids=input_ids,
