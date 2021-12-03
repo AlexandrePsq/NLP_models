@@ -8,7 +8,10 @@ from dataset import Dataset, InputExample, InputFeatures
 from metrics import Metrics
 from gpt2_utils import save, format_time
 
+torch.backends.cudnn.benchmark = True
+torch.backends.cudnn.enabled = True
 
+#PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:50
 
 #########################################
 ############## Base Class ###############
@@ -157,6 +160,7 @@ class ModelProcessor(object):
                     'loss {:5.2f} | ppl {:8.2f}'.format(epoch_i, step, len(train_dataloader), lr*10**5, elapsed, total_train_loss-tmp, math.exp(total_train_loss-tmp))) # / :5.2f
                 tmp = total_train_loss if step>0 else 0
                 total_train_loss = self.training_step(batch, total_train_loss)
+                torch.cuda.empty_cache()
 
             # Calculate the average loss over all of the batches.
             avg_train_loss = total_train_loss / len(train_dataloader)            
@@ -246,7 +250,7 @@ class ModelProcessor(object):
         report = Metrics.report(self.metric_name, 
                                 [item for sublist in y_true for item in sublist], 
                                 [item for sublist in y_pred for item in sublist])
-        print(report)
+        #print(report)
         # Report the final accuracy for this validation run.
         avg_val_accuracy = total_eval_accuracy / len(dataloader)
         print("  Accuracy: {0:.2f}".format(avg_val_accuracy))

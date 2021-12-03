@@ -107,7 +107,7 @@ class BertExtractor(object):
                         'intermediate_size': self.model.config.intermediate_size,
                         'attention_probs_dropout_prob': self.model.config.attention_probs_dropout_prob
                                                                        }
-        if config_path is not None:
+        if (config_path is not None) and (not os.path.isdir(config_path)):
             with open(config_path, 'r') as f:  
                 self.config.update(json.load(f))
 

@@ -6,6 +6,7 @@ import glob
 import wget
 import torch
 import random
+import pickle
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -23,8 +24,9 @@ from joblib import Parallel, delayed
 class MLMDataset(Dataset):
     """Class for MLM dataset fetching and formatting."""
 
-    def __init__(self, task_name, dataset_name, dataset_dir=None, url=None):
+    def __init__(self, task_name, dataset_name, dataset_dir=None, url=None, output_dir='./'):
         super(MLMDataset, self).__init__(task_name, dataset_name, dataset_dir, url)
+        self.output_dir = output_dir
 
     def _fetch_dataset(self):
         """Fetch MLM dataset."""
@@ -38,9 +40,12 @@ class MLMDataset(Dataset):
     def process_mlm_dataset(self, set_type):
         """Process CoNLL2003 dataset.
         Be careful that the last line of your train/dev/test files is an empty line."""
-        self.train = open(os.path.join(self.dataset_dir, f'{self.dataset_name}train.txt'), 'r').read().lower().split(' \n ')
-        self.test = open(os.path.join(self.dataset_dir, f'{self.dataset_name}test.txt'), 'r').read().lower().split(' \n ')
-        self.dev = open(os.path.join(self.dataset_dir, f'{self.dataset_name}dev.txt'), 'r').read().lower().split(' \n ')
+        if not os.path.exists(os.path.join(self.output_dir, 'train_examples.pkl')):
+            self.train = open(os.path.join(self.dataset_dir, f'{self.dataset_name}train.txt'), 'r').read().lower().split(' \n ')
+        if not os.path.exists(os.path.join(self.output_dir, 'test_examples.pkl')):
+            self.test = open(os.path.join(self.dataset_dir, f'{self.dataset_name}test.txt'), 'r').read().lower().split(' \n ')
+        if not os.path.exists(os.path.join(self.output_dir, 'dev_examples.pkl')):
+            self.dev = open(os.path.join(self.dataset_dir, f'{self.dataset_name}dev.txt'), 'r').read().lower().split(' \n ')
             
     def get_labels(self):
         """ Returns possible labels for the task.
@@ -51,22 +56,41 @@ class MLMDataset(Dataset):
 class MLMProcessor(DataProcessor):
     """Processor for the MLM data set."""
               
-    def __init__(self, max_seq_length, masking_proportion=15, device='cpu'):
+    def __init__(self, max_seq_length, masking_proportion=15, device='cpu', output_dir='./'):
         self.max_seq_length = max_seq_length
         self.masking_proportion = masking_proportion
         self.device = device
+        self.output_dir = output_dir
 
     def get_train_examples(self, dataset_object):
         """See base class."""
-        return self._create_examples(dataset_object.train, "train")
+        if os.path.exists(os.path.join(self.output_dir, 'train_features.pkl')):
+            examples = self.load_object(os.path.join(self.output_dir, 'train_features.pkl'))
+        elif os.path.exists(os.path.join(self.output_dir, 'train_examples.pkl')):
+            examples = self.load_object(os.path.join(self.output_dir, 'train_examples.pkl'))
+        else:
+            examples = self._create_examples(dataset_object.train, "train")
+        return examples
 
     def get_dev_examples(self, dataset_object):
         """See base class."""
-        return self._create_examples(dataset_object.dev, "dev")
+        if os.path.exists(os.path.join(self.output_dir, 'dev_features.pkl')):
+            examples = self.load_object(os.path.join(self.output_dir, 'dev_features.pkl'))
+        elif os.path.exists(os.path.join(self.output_dir, 'dev_examples.pkl')):
+            examples = self.load_object(os.path.join(self.output_dir, 'dev_examples.pkl'))
+        else:
+            examples = self._create_examples(dataset_object.dev, "dev")
+        return examples
 
     def get_test_examples(self, dataset_object):
         """See base class."""
-        return self._create_examples(dataset_object.test, "test")
+        if os.path.exists(os.path.join(self.output_dir, 'test_features.pkl')):
+            examples = self.load_object(os.path.join(self.output_dir, 'test_features.pkl'))
+        elif os.path.exists(os.path.join(self.output_dir, 'test_examples.pkl')):
+            examples = self.load_object(os.path.join(self.output_dir, 'test_examples.pkl'))
+        else:
+            examples = self._create_examples(dataset_object.test, "test")
+        return examples
 
     def mask_tokens(self, sequence):
         """Mask a given proportion of sequence tokens."""
@@ -86,18 +110,30 @@ class MLMProcessor(DataProcessor):
         #return sequence + ['[PAD]'] * (self.max_seq_length - n)
         return sequence + [0] *(self.max_seq_length - n)
 
+    def save_object(self, filename, data):
+        """Save computed examples and features.
+        """
+        with open(filename, 'wb') as outp:  # Overwrites any existing file.
+            pickle.dump(data, outp, pickle.HIGHEST_PROTOCOL)
+    
+    def load_object(self, filename):
+        """Load computed examples and features.
+        """
+        with open(filename, 'rb') as inp:  # Overwrites any existing file.
+            data = pickle.load(inp)
+        return data
+        
     def _create_examples(self, lines, set_type):
         """Returns list of InputExample objects."""
         # Parallelizing a bit batch computation because it is quite slow...
-        lines = lines[:5000]
+        #lines = lines[:500]
         step = 18 # 17 sentences per input sequence
+        #encoded_dict = self.tokenizer.encode('[CLS] ' + ' [SEP] [CLS] '.join(lines) + ' [SEP]')
+        #tokens = np.array(encoded_dict.tokens)
+        #ids = np.array(encoded_dict.ids)
+        
         n = len(lines)
         
-        def g(lines, i, step):
-            return self.tokenizer.encode(' '.join(lines[i:i + step])).ids
-        
-        batches = Parallel(n_jobs=-1)(delayed(g)(lines, i, step) for i in tqdm(range(0, n, step)))
-
         def f(i, sequence):
             guid = "%s-%s" % (set_type, i)
             text_a = self.pad_to_max_length([2] + self.mask_tokens(sequence) + [3])
@@ -106,8 +142,23 @@ class MLMProcessor(DataProcessor):
             example = InputExample(guid=guid,text_a=text_a,text_b=text_b,label=label)
             return example
         
-        examples = Parallel(n_jobs=-1)(delayed(f)(i, sequence) for i, sequence in tqdm(enumerate(batches)))
+        def g(i, line):
+            sequence = self.tokenizer.encode(' '.join(line)).ids
+            return f(i, sequence)
         
+        # Splitting data for memory issues...
+        indexes = list(range(0, n, step))
+        m = len(indexes)
+        n_splits = 5
+        splits = [indexes[i*m//n_splits: m*(i+1)//n_splits] for i in range(n_splits)]
+        for index_split, split in enumerate(splits):
+            print(f"Computing split {index_split+1} / {n_splits}... Split size: {len(split)}")
+            examples = Parallel(n_jobs=-1)(delayed(g)(index+split[0], lines[i:i + step]) for index, i in tqdm(enumerate(split)))
+            self.save_object(os.path.join(self.output_dir, f'{set_type}_examples_split-{index_split}.pkl'), examples)
+        # Merging
+        examples = [self.load_object(os.path.join(self.output_dir, f'{set_type}_examples_split-{index_split}.pkl')) for index_split in range(n_splits)]
+        examples = [item for l in examples for item in l]
+        self.save_object(os.path.join(self.output_dir, f'{set_type}_examples.pkl'), examples)
         return examples
               
     def set_tokenizer(self, tokenizer):
@@ -137,7 +188,7 @@ class MLMProcessor(DataProcessor):
         print(f'Batch {i} Done')
         return batches
     
-    def convert_examples_to_features(self, examples, label_list, max_seq_length, tokenizer):
+    def convert_examples_to_features(self, examples, label_list, max_seq_length, tokenizer, set_type):
         """Loads a data file into a list of `InputBatch`s.
         Arguments:
             - label_list is discarded
@@ -153,19 +204,24 @@ class MLMProcessor(DataProcessor):
                 e.g.: [1, 4, 4, 5, 2, 0, 0]
         """
         
-        def f(example):
-            labels_ids = torch.FloatTensor(example.label).unsqueeze(0).to(torch.int64).to(self.device)
-            input_ids = torch.FloatTensor(example.text_a).unsqueeze(0).to(torch.int64).to(self.device)
-            attention_mask = torch.ones(input_ids.size()).to(torch.int64).to(self.device)
-            token_type_ids = torch.zeros(input_ids.size()).to(torch.int64).to(self.device)
-            return InputFeatures(input_ids=input_ids,
-                                    attention_mask=attention_mask,
-                                    token_type_ids=token_type_ids,
-                                    label_ids=labels_ids,
-                                    output_mask=None)
-        
-        features = Parallel(n_jobs=-1)(delayed(f)(example) for example in tqdm(examples))
-                                       
+        if os.path.exists(os.path.join(self.output_dir, f'{set_type}_features.pkl')):
+            features = examples
+        else:
+
+            def f(example):
+                labels_ids = torch.FloatTensor(example.label).unsqueeze(0).to(torch.int64)
+                input_ids = torch.FloatTensor(example.text_a).unsqueeze(0).to(torch.int64)
+                attention_mask = torch.ones(input_ids.size()).to(torch.int64)
+                token_type_ids = torch.zeros(input_ids.size()).to(torch.int64)
+                return InputFeatures(input_ids=input_ids,
+                                        attention_mask=attention_mask,
+                                        token_type_ids=token_type_ids,
+                                        label_ids=labels_ids,
+                                        output_mask=None)
+
+            features = Parallel(n_jobs=-1)(delayed(f)(example) for example in tqdm(examples))
+            self.save_object(os.path.join(self.output_dir, f'{set_type}_features.pkl'), features)
+
         return features
     
     def get_data_loader(self, features, batch_size, local_rank, set_type):

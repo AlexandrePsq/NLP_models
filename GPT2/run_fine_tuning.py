@@ -1,7 +1,8 @@
 """ Code to fine-tune hugging-face implementation of GPT2 model.
 https://huggingface.co/
 """
-
+import warnings
+warnings.simplefilter(action='ignore')
 
 import os
 import wget
@@ -55,14 +56,13 @@ if __name__=='__main__':
 
     logging.info("Set and retrieve the device on which to run...")
     device = get_device()
-    print("CAREFUL device manually put to CPU")
     task = parameters['task'].lower()
     logging.info("\tDone.")
 
     logging.info("Instanciating dataset and data processor...")
     if task in ['language-modeling']:
         data = LMDataset(task, parameters['dataset_name'].lower(), dataset_dir=parameters['dataset_dir'])
-        processor = LMProcessor(parameters['max_length'], device=device)
+        processor = LMProcessor(parameters['max_length'], device=device, output_dir=parameters['output_dir'])
     logging.info("\tDone.")
 
     logging.info("Fetching data (training + validation) and parameters...")
@@ -98,6 +98,8 @@ if __name__=='__main__':
         tokenizer.enable_truncation(max_length=512)
         tokenizer.save_model(parameters['output_dir'], parameters['dataset_name'] + 'tokenizer')
         processor.set_tokenizer(tokenizer)
+        print(tokenizer.encode("<s> The dog ran <mask> outside . <unk> </s> <pad>").tokens) # --> ['<s>', 'Ġ', '<mask>', 'Ġ.', 'Ġ', '<unk>', 'Ġ', '</s>', 'Ġ', '<pad>']
+        print(tokenizer.encode("<s> <mask> . <unk> </s> <pad>").ids) # --> [0, 225, 4, 272, 225, 3, 225, 2, 225, 1]
     else:
         tokenizer = GPT2Tokenizer.from_pretrained(parameters['pretrained_tokenizer'])
 
@@ -114,10 +116,10 @@ if __name__=='__main__':
     logging.info("\tDone.")
 
     logging.info("Get input features...")
-    train_features = processor.convert_examples_to_features(train_examples, parameters['max_length'], tokenizer) 
-    dev_features = processor.convert_examples_to_features(dev_examples, parameters['max_length'], tokenizer)
+    train_features = processor.convert_examples_to_features(train_examples, parameters['max_length'], tokenizer, set_type='train')
+    dev_features = processor.convert_examples_to_features(dev_examples, parameters['max_length'], tokenizer, set_type='dev')
     if parameters['do_test']:
-        test_features = processor.convert_examples_to_features(test_examples, parameters['max_length'], tokenizer) 
+        test_features = processor.convert_examples_to_features(test_examples, parameters['max_length'], tokenizer, set_type='test')
     logging.info("\tDone.")
     
     logging.info("Creating data loaders...")

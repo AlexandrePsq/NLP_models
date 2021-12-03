@@ -35,7 +35,9 @@ class LSTMExtractor(object):
             if output_hidden_states:
                 self.model.rnn.forward = lambda input, hidden: utils.forward(self.model.rnn, input, hidden, self.model.param)
         else:
-            self.model = RNNModel.from_pretrained(config_path, output_hidden_states=output_hidden_states)
+            parameters = utils.read_yaml(config_path) if isinstance(config_path, str) else {'cuda': config_path['cuda']}
+            device = torch.device("cuda" if parameters["cuda"] else "cpu")
+            self.model = RNNModel.from_pretrained(config_path, output_hidden_states=output_hidden_states, device=device)
         self.tokenizer = tokenize
         
         self.language = language

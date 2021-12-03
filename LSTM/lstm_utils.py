@@ -174,18 +174,24 @@ def batchify_text_with_memory_size(iterator, memory_size):
 
 def save(model, data_name, language, path2derivatives, extra_name=''):
     path = '_'.join([model.__name__(), data_name, language]) + f'{extra_name}.pt'
-    path = os.path.join(path2derivatives, 'fMRI/models', language, path)
+    path = os.path.join(path2derivatives, 'fMRI/models/', language, 'LSTM', path)
     with open(path, 'wb') as f:
         torch.save(model, f)
 
 
-def load(model, data_name, language, path2derivatives, extra_name=''):
-    path = '_'.join([model.__name__(), data_name, language]) + f'{extra_name}.pt'
-    path = os.path.join(path2derivatives, 'fMRI/models', language, path)
-    assert os.path.exists(path)
-    with open(path, 'rb') as f:
-        return torch.load(f)
-
+def load(model, data_name=None, language='', path2derivatives=None, extra_name='', parameters=None, device='cpu'):
+    try:
+        path = '_'.join([model.__name__(), data_name, language]) + f'{extra_name}.pt'
+        path = os.path.join(path2derivatives, 'fMRI/models', language, 'LSTM', path)
+        assert os.path.exists(path)
+        with open(path, 'rb') as f:
+            return torch.load(f)
+    except:
+        try:
+            model.load_state_dict(torch.load(parameters['weights_path'], map_location=torch.device(device)))
+        except:
+            model.load_state_dict(torch.load(parameters['weights_path'], map_location=torch.device(device)).state_dict())
+    return model
 
 
 ###############################################################################

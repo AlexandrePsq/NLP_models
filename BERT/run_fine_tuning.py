@@ -1,9 +1,11 @@
 """ Code to fine-tune hugging-face implementation of BERT model.
 https://huggingface.co/
 """
-
+import warnings
+warnings.simplefilter(action='ignore')
 
 import os
+import gc
 import wget
 import time
 import yaml
@@ -69,16 +71,15 @@ if __name__=='__main__':
         data = SentenceClassificationDataset(task, parameters['dataset_name'].lower(), dataset_dir=parameters['dataset_dir'])
         processor = SentenceClassificationProcessor()
     elif task == 'mask-language-modeling':
-        data = MLMDataset(task, parameters['dataset_name'].lower(), dataset_dir=parameters['dataset_dir'])
-        processor = MLMProcessor(parameters['max_length'], parameters['masking_proportion'], device=device)
+        data = MLMDataset(task, parameters['dataset_name'].lower(), dataset_dir=parameters['dataset_dir'], output_dir=parameters['output_dir'])
+        processor = MLMProcessor(parameters['max_length'], parameters['masking_proportion'], device=device, output_dir=parameters['output_dir'])
     logging.info("\tDone.")
 
     logging.info("Fetching data (training + validation) and parameters...")
     data._fetch_dataset()
     for set_type in ['train', 'dev']:
         data.process_dataset(set_type)
-    if parameters['do_test']:
-        data.process_dataset('test')
+    
     label_list = processor.get_labels(data)
     num_labels = len(label_list)
     if task in ['pos-tagging', 'ner']:
@@ -129,7 +130,7 @@ if __name__=='__main__':
         tokenizer.enable_truncation(max_length=512)
         tokenizer.save_model(parameters['output_dir'], parameters['dataset_name'] + 'tokenizer')
         processor.set_tokenizer(tokenizer)
-        #print(tokenizer.encode("[CLS] [MASK] [UNK] [SEP] [PAD]").ids) # --> [2, 4, 1, 3, 0]
+        print(tokenizer.encode("[CLS] [MASK] . [UNK] [SEP] [PAD]").ids) # --> [2, 4, 12, 1, 3, 0]
     else:
         tokenizer = BertTokenizer.from_pretrained(parameters['pretrained_tokenizer'])
     model.to(device)
@@ -141,15 +142,12 @@ if __name__=='__main__':
     logging.info("Get input examples...")
     train_examples = processor.get_train_examples(data)
     dev_examples = processor.get_dev_examples(data)
-    if parameters['do_test']:
-        test_examples = processor.get_test_examples(data)
+        
     logging.info("\tDone.")
 
     logging.info("Get input features...")
-    train_features = processor.convert_examples_to_features(train_examples, label_list, parameters['max_length'], tokenizer) 
-    dev_features = processor.convert_examples_to_features(dev_examples, label_list, parameters['max_length'], tokenizer)
-    if parameters['do_test']:
-        test_features = processor.convert_examples_to_features(test_examples, label_list, parameters['max_length'], tokenizer) 
+    train_features = processor.convert_examples_to_features(train_examples, label_list, parameters['max_length'], tokenizer, set_type='train')
+    dev_features = processor.convert_examples_to_features(dev_examples, label_list, parameters['max_length'], tokenizer, set_type='dev')
     logging.info("\tDone.")
     
     logging.info("Creating data loaders...")
@@ -161,11 +159,6 @@ if __name__=='__main__':
                                                 batch_size=parameters['batch_size'], 
                                                 local_rank=parameters['local_rank'], 
                                                 set_type='dev')
-    if parameters['do_test']:
-        test_dataloader = processor.get_data_loader(test_features, 
-                                                    batch_size=parameters['batch_size'], 
-                                                    local_rank=parameters['local_rank'], 
-                                                    set_type='test')
     logging.info("\tDone.")
 
     logging.info("Creating optimizer and learning rate scheduler...")
@@ -183,6 +176,7 @@ if __name__=='__main__':
     logging.info("\tDone.")
 
     logging.info("Fine-tuning the model.")
+    gc.collect()
     model_processor = ModelProcessor(model, optimizer, tokenizer, 
                                         scheduler, device, 
                                         parameters['metric_name'], 
@@ -194,6 +188,13 @@ if __name__=='__main__':
         logging.info(stat['report'])
     test_accuracy, test_loss = None, None
     if parameters['do_test']:
+        data.process_dataset('test')
+        test_examples = processor.get_test_examples(data)
+        test_features = processor.convert_examples_to_features(test_examples, label_list, parameters['max_length'], tokenizer, set_type='test')
+        test_dataloader = processor.get_data_loader(test_features, 
+                                                    batch_size=parameters['batch_size'], 
+                                                    local_rank=parameters['local_rank'], 
+                                                    set_type='test')
         logging.info("Evaluation report: ")
         test_accuracy, test_loss, test_time, report = model_processor.evaluate(test_dataloader) 
         logging.info(report)
