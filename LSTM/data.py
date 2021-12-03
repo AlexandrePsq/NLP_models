@@ -121,10 +121,9 @@ class Dictionary(object):
         freqs = np.array([self.word2freq[w] for w in self.idx2word])
         order = np.argsort(freqs)
         unkwown = list(np.array(self.idx2word)[order][:max(-self.max_size, -len(self.idx2word))])
-        for word in unkwown:
-            self.idx2word.remove(word)
-            del self.word2idx[word]
-
+        self.idx2word = list(np.array(self.idx2word)[order][max(-self.max_size, -len(self.idx2word)):])
+        self.word2idx = {w: i for i, w in enumerate(self.idx2word)}
+        
     def __len__(self):
         return len(self.idx2word)
 

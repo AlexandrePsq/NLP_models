@@ -1,6 +1,6 @@
 """
 """
-
+import torch
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -27,6 +27,10 @@ class Report(object):
         plt.plot(df['Training Loss'], 'b-o', label="Training")
         plt.plot(df['Valid. Loss'], 'g-o', label="Validation")
         if test_loss:
+            try:
+                test_loss = test_loss.cpu()
+            except:
+                print('Already to cpu format.')
             plt.hlines(test_loss, 0, nb_epochs, 'r', label='Test')
 
         # Label the plot.

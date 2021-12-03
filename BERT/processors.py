@@ -1,11 +1,12 @@
 import os
 import time
+import math
 import torch
 import numpy as np
 
 from dataset import Dataset, InputExample, InputFeatures
 from metrics import Metrics
-
+from bert_utils import save, format_time
 
 
 #########################################
@@ -80,7 +81,8 @@ class ModelProcessor(object):
         # `batch` contains three pytorch tensors:
         #   [0]: input ids 
         #   [1]: attention masks
-        #   [2]: labels 
+        #   [2]: token type ids 
+        #   [3]: labels 
         input_ids = batch[0].to(self.device)
         attention_mask = batch[1].to(self.device)
         token_type_ids = batch[2].to(self.device)
@@ -121,7 +123,7 @@ class ModelProcessor(object):
 
         # Measure the total training time for the whole run.
         total_t0 = time.time()
-        save_step = self.nb_epochs * len(train_dataloader) // self.nb_checkpoints
+        save_step = max(1, self.nb_epochs * len(train_dataloader) // self.nb_checkpoints)
 
         # For each epoch...
         for epoch_i in range(0, self.nb_epochs):
@@ -146,12 +148,15 @@ class ModelProcessor(object):
                 if step != 0 and step % save_step == 0:
                     save(self.model, self.tokenizer, output_dir, 'checkpoint_' + str(checkpoints_index))
                     checkpoints_index += 1
-                # Progress update every 40 batches.
-                if step % 50 == 0 and not step == 0:
+                # Progress update every 50 batches.
+                if step % min(50, save_step) == 0 and not step == 0:
                     # Calculate elapsed time in minutes.
                     elapsed = format_time(time.time() - t0)
                     # Report progress.
-                    print('  Batch {:>5,}  of  {:>5,}.    Elapsed: {:}.'.format(step, len(train_dataloader), elapsed))
+                    lr = vars(self.optimizer)['param_groups'][0]['lr']
+                    print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.2f}e-5 | ms/batch {} | '
+                    'loss {:5.2f} | ppl {:8.2f}'.format(epoch_i, step, len(train_dataloader), lr*10**5, elapsed, total_train_loss-tmp, math.exp(total_train_loss-tmp))) # / :5.2f
+                tmp = total_train_loss if step>0 else 0
                 total_train_loss = self.training_step(batch, total_train_loss)
 
             # Calculate the average loss over all of the batches.

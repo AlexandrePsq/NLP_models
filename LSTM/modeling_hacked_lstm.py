@@ -117,16 +117,18 @@ class RNNModel(nn.Module):
             return weight.new_zeros(self.param['nlayers'], bsz, self.param['nhid'])
 
     @classmethod
-    def from_pretrained(cls, path, output_hidden_states=False):
-        if os.path.exists(path):
+    def from_pretrained(cls, path, output_hidden_states=False, device='cpu'):
+        if isinstance(path, dict):
+            parameters = path
+        elif os.path.exists(path):
             parameters = utils.read_yaml(path)
         else:
             raise ValueError("{} doesn't exists.".format(path))
         model = cls(**parameters)
         try:
-            model.load_state_dict(torch.load(parameters['weights_path']))
+            model.load_state_dict(torch.load(parameters['weights_path'], map_location=torch.device(device)))
         except:
-            model.load_state_dict(torch.load(parameters['weights_path']).state_dict())
+            model.load_state_dict(torch.load(parameters['weights_path'], map_location=torch.device(device)).state_dict())
         if output_hidden_states:
             model.rnn.forward = lambda input, hidden: utils.forward(model.rnn, input, hidden, model.param)
         return model
