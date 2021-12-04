@@ -108,6 +108,16 @@ if __name__=='__main__':
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     logging.info("\tDone.")
 
+    ############ to delete ############
+    data.process_dataset('test')
+    test_examples = processor.get_test_examples(data)
+    test_features = processor.convert_examples_to_features(test_examples, parameters['max_length'], tokenizer, set_type='test')
+    dev_examples = processor.get_dev_examples(data)
+    dev_features = processor.convert_examples_to_features(dev_examples, parameters['max_length'], tokenizer, set_type='dev')
+    train_examples = processor.get_train_examples(data)
+    train_features = processor.convert_examples_to_features(train_examples, parameters['max_length'], tokenizer, set_type='train')
+    ###################################
+    
     logging.info("Get input examples...")
     train_examples = processor.get_train_examples(data)
     dev_examples = processor.get_dev_examples(data)
