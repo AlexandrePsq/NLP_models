@@ -62,7 +62,7 @@ if __name__=='__main__':
     logging.info("Instanciating dataset and data processor...")
     if task in ['language-modeling']:
         data = LMDataset(task, parameters['dataset_name'].lower(), dataset_dir=parameters['dataset_dir'])
-        processor = LMProcessor(parameters['max_length'], device=device, output_dir=parameters['output_dir'])
+        processor = LMProcessor(parameters['max_length'], device=device, output_dir=parameters['output_dir'], dataset_name=parameters['dataset_name'])
     logging.info("\tDone.")
 
     logging.info("Fetching data (training + validation) and parameters...")
@@ -85,10 +85,11 @@ if __name__=='__main__':
                         output_attentions=parameters['output_attentions'], # Whether the model returns attentions weights.
                         output_hidden_states=parameters['output_hidden_states'], # Whether the model returns all hidden-states.
             )
+            
     if parameters['tokenizer_from_scratch']:
         tokenizer = ByteLevelBPETokenizer( 
                         lowercase=parameters['lowercase'])
-        files = [os.path.join(parameters['dataset_dir'], item) for item in ['train.txt', 'test.txt', 'dev.txt']]
+        files = [os.path.join(parameters['dataset_dir'], item) for item in ['gpt2_train.txt', 'gpt2_test.txt', 'gpt2_dev.txt']]
         tokenizer.train( 
                         files, 
                         vocab_size=parameters['vocab_size'], 
@@ -114,6 +115,10 @@ if __name__=='__main__':
     test_features = processor.convert_examples_to_features(test_examples, parameters['max_length'], tokenizer, set_type='test')
     dev_examples = processor.get_dev_examples(data)
     dev_features = processor.convert_examples_to_features(dev_examples, parameters['max_length'], tokenizer, set_type='dev')
+    test_examples = []
+    test_features = []
+    dev_examples = []
+    dev_features = []
     train_examples = processor.get_train_examples(data)
     train_features = processor.convert_examples_to_features(train_examples, parameters['max_length'], tokenizer, set_type='train')
     ###################################

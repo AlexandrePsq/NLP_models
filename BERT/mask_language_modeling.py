@@ -1,5 +1,7 @@
 """ 
 """
+import warnings
+warnings.simplefilter(action='ignore')
 
 import os
 import glob
@@ -40,11 +42,11 @@ class MLMDataset(Dataset):
     def process_mlm_dataset(self, set_type):
         """Process CoNLL2003 dataset.
         Be careful that the last line of your train/dev/test files is an empty line."""
-        if not os.path.exists(os.path.join(self.output_dir, 'train_examples.pkl')):
+        if not os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}train_examples.pkl')):
             self.train = open(os.path.join(self.dataset_dir, f'{self.dataset_name}train.txt'), 'r').read().lower().split(' \n ')
-        if not os.path.exists(os.path.join(self.output_dir, 'test_examples.pkl')):
+        if not os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}test_examples.pkl')):
             self.test = open(os.path.join(self.dataset_dir, f'{self.dataset_name}test.txt'), 'r').read().lower().split(' \n ')
-        if not os.path.exists(os.path.join(self.output_dir, 'dev_examples.pkl')):
+        if not os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}dev_examples.pkl')):
             self.dev = open(os.path.join(self.dataset_dir, f'{self.dataset_name}dev.txt'), 'r').read().lower().split(' \n ')
             
     def get_labels(self):
@@ -56,38 +58,40 @@ class MLMDataset(Dataset):
 class MLMProcessor(DataProcessor):
     """Processor for the MLM data set."""
               
-    def __init__(self, max_seq_length, masking_proportion=15, device='cpu', output_dir='./'):
+    def __init__(self, max_seq_length, masking_proportion=15, device='cpu', output_dir='./', dataset_name='', dataset_dir='./'):
         self.max_seq_length = max_seq_length
         self.masking_proportion = masking_proportion
         self.device = device
+        self.dataset_name = dataset_name
         self.output_dir = output_dir
+        self.dataset_dir = dataset_dir
 
     def get_train_examples(self, dataset_object):
         """See base class."""
-        if os.path.exists(os.path.join(self.output_dir, 'train_features.pkl')):
-            examples = self.load_object(os.path.join(self.output_dir, 'train_features.pkl'))
-        elif os.path.exists(os.path.join(self.output_dir, 'train_examples.pkl')):
-            examples = self.load_object(os.path.join(self.output_dir, 'train_examples.pkl'))
+        if os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}train_features.pkl')):
+            examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}train_features.pkl'))
+        elif os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}train_examples.pkl')):
+            examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}train_examples.pkl'))
         else:
             examples = self._create_examples(dataset_object.train, "train")
         return examples
 
     def get_dev_examples(self, dataset_object):
         """See base class."""
-        if os.path.exists(os.path.join(self.output_dir, 'dev_features.pkl')):
-            examples = self.load_object(os.path.join(self.output_dir, 'dev_features.pkl'))
-        elif os.path.exists(os.path.join(self.output_dir, 'dev_examples.pkl')):
-            examples = self.load_object(os.path.join(self.output_dir, 'dev_examples.pkl'))
+        if os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}dev_features.pkl')):
+            examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}dev_features.pkl'))
+        elif os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}dev_examples.pkl')):
+            examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}dev_examples.pkl'))
         else:
             examples = self._create_examples(dataset_object.dev, "dev")
         return examples
 
     def get_test_examples(self, dataset_object):
         """See base class."""
-        if os.path.exists(os.path.join(self.output_dir, 'test_features.pkl')):
-            examples = self.load_object(os.path.join(self.output_dir, 'test_features.pkl'))
-        elif os.path.exists(os.path.join(self.output_dir, 'test_examples.pkl')):
-            examples = self.load_object(os.path.join(self.output_dir, 'test_examples.pkl'))
+        if os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}test_features.pkl')):
+            examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}test_features.pkl'))
+        elif os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}test_examples.pkl')):
+            examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}test_examples.pkl'))
         else:
             examples = self._create_examples(dataset_object.test, "test")
         return examples
@@ -152,13 +156,14 @@ class MLMProcessor(DataProcessor):
         n_splits = 5
         splits = [indexes[i*m//n_splits: m*(i+1)//n_splits] for i in range(n_splits)]
         for index_split, split in enumerate(splits):
-            print(f"Computing split {index_split+1} / {n_splits}... Split size: {len(split)}")
-            examples = Parallel(n_jobs=-1)(delayed(g)(index+split[0], lines[i:i + step]) for index, i in tqdm(enumerate(split)))
-            self.save_object(os.path.join(self.output_dir, f'{set_type}_examples_split-{index_split}.pkl'), examples)
+            if index_split > 3:
+                print(f"Computing split {index_split+1} / {n_splits}... Split size: {len(split)}")
+                examples = Parallel(n_jobs=-1)(delayed(g)(index+split[0], lines[i:i + step]) for index, i in tqdm(enumerate(split)))
+                self.save_object(os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_examples_split-{index_split}.pkl'), examples)
         # Merging
-        examples = [self.load_object(os.path.join(self.output_dir, f'{set_type}_examples_split-{index_split}.pkl')) for index_split in range(n_splits)]
+        examples = [self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_examples_split-{index_split}.pkl')) for index_split in range(n_splits)]
         examples = [item for l in examples for item in l]
-        self.save_object(os.path.join(self.output_dir, f'{set_type}_examples.pkl'), examples)
+        self.save_object(os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_examples.pkl'), examples)
         return examples
               
     def set_tokenizer(self, tokenizer):
@@ -204,7 +209,7 @@ class MLMProcessor(DataProcessor):
                 e.g.: [1, 4, 4, 5, 2, 0, 0]
         """
         
-        if os.path.exists(os.path.join(self.output_dir, f'{set_type}_features.pkl')):
+        if os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_features.pkl')):
             features = examples
         else:
 
@@ -220,7 +225,7 @@ class MLMProcessor(DataProcessor):
                                         output_mask=None)
 
             features = Parallel(n_jobs=-1)(delayed(f)(example) for example in tqdm(examples))
-            self.save_object(os.path.join(self.output_dir, f'{set_type}_features.pkl'), features)
+            self.save_object(os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_features.pkl'), features)
 
         return features
     

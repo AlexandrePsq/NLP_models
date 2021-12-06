@@ -72,7 +72,7 @@ if __name__=='__main__':
         processor = SentenceClassificationProcessor()
     elif task == 'mask-language-modeling':
         data = MLMDataset(task, parameters['dataset_name'].lower(), dataset_dir=parameters['dataset_dir'], output_dir=parameters['output_dir'])
-        processor = MLMProcessor(parameters['max_length'], parameters['masking_proportion'], device=device, output_dir=parameters['output_dir'])
+        processor = MLMProcessor(parameters['max_length'], parameters['masking_proportion'], device=device, output_dir=parameters['output_dir'], dataset_name=parameters['dataset_name'])
     logging.info("\tDone.")
 
     logging.info("Fetching data (training + validation) and parameters...")
@@ -118,7 +118,7 @@ if __name__=='__main__':
                         handle_chinese_chars=False, 
                         strip_accents=parameters['strip_accents'], 
                         lowercase=parameters['lowercase'])
-        files = [os.path.join(parameters['dataset_dir'], item) for item in ['train.txt', 'test.txt', 'dev.txt']]
+        files = [os.path.join(parameters['dataset_dir'], item) for item in ['bert_train.txt', 'bert_test.txt', 'bert_dev.txt']]
         tokenizer.train( 
                         files, 
                         vocab_size=parameters['vocab_size'], 
@@ -141,11 +141,6 @@ if __name__=='__main__':
 
     logging.info("Get input examples...")
     ############ to delete ############
-    data.process_dataset('test')
-    test_examples = processor.get_test_examples(data)
-    test_features = processor.convert_examples_to_features(test_examples, label_list, parameters['max_length'], tokenizer, set_type='test')
-    dev_examples = processor.get_dev_examples(data)
-    dev_features = processor.convert_examples_to_features(dev_examples, label_list, parameters['max_length'], tokenizer, set_type='dev')
     train_examples = processor.get_train_examples(data)
     train_features = processor.convert_examples_to_features(train_examples, label_list, parameters['max_length'], tokenizer, set_type='train')
     ###################################
@@ -192,10 +187,16 @@ if __name__=='__main__':
                                         parameters['nb_epochs'],
                                         parameters['use_output_mask'])
     training_stats = model_processor.train(train_dataloader, dev_dataloader, parameters['output_dir'])
+    
+    logging.info("Saving fine-tuned model to {}...".format(os.path.join(parameters['output_dir'], 'fine_tuned')))
+    save(model, tokenizer, parameters['output_dir'], 'fine_tuned')
+    logging.info("\tDone.")
+    
     logging.info("Validation reports: ")
     for stat in training_stats:
         logging.info(stat['report'])
     test_accuracy, test_loss = None, None
+    
     if parameters['do_test']:
         data.process_dataset('test')
         test_examples = processor.get_test_examples(data)
@@ -208,11 +209,7 @@ if __name__=='__main__':
         test_accuracy, test_loss, test_time, report = model_processor.evaluate(test_dataloader) 
         logging.info(report)
     logging.info("\tDone.")
-
-    logging.info("Saving fine-tuned model to {}...".format(os.path.join(parameters['output_dir'], 'fine_tuned')))
-    save(model, tokenizer, parameters['output_dir'], 'fine_tuned')
-    logging.info("\tDone.")
-
+    
     logging.info("Plotting training and validation losses...")
     Report.plots_train_val_loss(training_stats, parameters['nb_epochs'], 
                                 os.path.join(parameters['output_dir'], 'train_val_loss.png'), 

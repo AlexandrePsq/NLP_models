@@ -1,5 +1,7 @@
 """ 
 """
+import warnings
+warnings.simplefilter(action='ignore')
 
 import os
 import wget
@@ -46,9 +48,13 @@ class LMDataset(Dataset):
     def process_gutenberg(self, set_type):
         """Process Gutenberg dataset.
         The result is an iterator of tuples (sentence, label)."""
-        self.train = open(os.path.join(self.dataset_dir, f'{self.dataset_name}train.txt'), 'r').read().lower().split(' \n ')
-        self.test = open(os.path.join(self.dataset_dir, f'{self.dataset_name}test.txt'), 'r').read().lower().split(' \n ')
-        self.dev = open(os.path.join(self.dataset_dir, f'{self.dataset_name}dev.txt'), 'r').read().lower().split(' \n ')
+        if not os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}train_examples.pkl')):
+            self.train = open(os.path.join(self.dataset_dir, f'{self.dataset_name}train.txt'), 'r').read().lower().split(' \n ')
+        if not os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}test_examples.pkl')):
+            self.test = open(os.path.join(self.dataset_dir, f'{self.dataset_name}test.txt'), 'r').read().lower().split(' \n ')
+        if not os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}dev_examples.pkl')):
+            self.dev = open(os.path.join(self.dataset_dir, f'{self.dataset_name}dev.txt'), 'r').read().lower().split(' \n ')
+          
 
     def process_lpp(self, set_type):
         """Process LPP dataset.
@@ -78,37 +84,39 @@ class LMDataset(Dataset):
 class LMProcessor(DataProcessor):
     """Processor for language modeling."""
     
-    def __init__(self, max_seq_length, device='cpu', output_dir='./'):
+    def __init__(self, max_seq_length, device='cpu', output_dir='./', dataset_name='', dataset_dir='./'):
         self.max_seq_length = max_seq_length
         self.device = device
+        self.dataset_name = dataset_name
         self.output_dir = output_dir
+        self.dataset_dir = dataset_dir
 
     def get_train_examples(self, dataset_object):
         """See base class."""
-        if os.path.exists(os.path.join(self.output_dir, 'train_features.pkl')):
-            examples = self.load_object(os.path.join(self.output_dir, 'train_features.pkl'))
-        elif os.path.exists(os.path.join(self.output_dir, 'train_examples.pkl')):
-            examples = self.load_object(os.path.join(self.output_dir, 'train_examples.pkl'))
+        if os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}train_features.pkl')):
+            examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}train_features.pkl'))
+        elif os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}train_examples.pkl')):
+            examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}train_examples.pkl'))
         else:
             examples = self._create_examples(dataset_object.train, "train")
         return examples
 
     def get_dev_examples(self, dataset_object):
         """See base class."""
-        if os.path.exists(os.path.join(self.output_dir, 'dev_features.pkl')):
-            examples = self.load_object(os.path.join(self.output_dir, 'dev_features.pkl'))
-        elif os.path.exists(os.path.join(self.output_dir, 'dev_examples.pkl')):
-            examples = self.load_object(os.path.join(self.output_dir, 'dev_examples.pkl'))
+        if os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}dev_features.pkl')):
+            examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}dev_features.pkl'))
+        elif os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}dev_examples.pkl')):
+            examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}dev_examples.pkl'))
         else:
             examples = self._create_examples(dataset_object.dev, "dev")
         return examples
 
     def get_test_examples(self, dataset_object):
         """See base class."""
-        if os.path.exists(os.path.join(self.output_dir, 'test_features.pkl')):
-            examples = self.load_object(os.path.join(self.output_dir, 'test_features.pkl'))
-        elif os.path.exists(os.path.join(self.output_dir, 'test_examples.pkl')):
-            examples = self.load_object(os.path.join(self.output_dir, 'test_examples.pkl'))
+        if os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}test_features.pkl')):
+            examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}test_features.pkl'))
+        elif os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}test_examples.pkl')):
+            examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}test_examples.pkl'))
         else:
             examples = self._create_examples(dataset_object.test, "test")
         return examples
@@ -150,7 +158,7 @@ class LMProcessor(DataProcessor):
             return f(i, sequence)
         
         examples = Parallel(n_jobs=-1)(delayed(g)(index, lines[i:i + step]) for index, i in tqdm(enumerate(range(0, n, step))))
-        self.save_object(os.path.join(self.output_dir, f'{set_type}_examples.pkl'), examples)
+        self.save_object(os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_examples.pkl'), examples)
         
         return examples
     
@@ -190,7 +198,7 @@ class LMProcessor(DataProcessor):
         """Loads a data file into a list of `InputBatch`s.  
         """
         
-        if os.path.exists(os.path.join(self.output_dir, f'{set_type}_features.pkl')):
+        if os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_features.pkl')):
             features = examples
         else:
 
@@ -206,7 +214,7 @@ class LMProcessor(DataProcessor):
                                         output_mask=None)
 
             features = Parallel(n_jobs=-1)(delayed(f)(example) for example in tqdm(examples))
-            self.save_object(os.path.join(self.output_dir, f'{set_type}_features.pkl'), features)
+            self.save_object(os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_features.pkl'), features)
                                        
         return features
     
