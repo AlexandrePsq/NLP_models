@@ -5,6 +5,7 @@ import warnings
 warnings.simplefilter(action='ignore')
 
 import os
+import gc
 import wget
 import time
 import yaml
@@ -62,7 +63,7 @@ if __name__=='__main__':
     logging.info("Instanciating dataset and data processor...")
     if task in ['language-modeling']:
         data = LMDataset(task, parameters['dataset_name'].lower(), dataset_dir=parameters['dataset_dir'])
-        processor = LMProcessor(parameters['max_length'], device=device, output_dir=parameters['output_dir'], dataset_name=parameters['dataset_name'])
+        processor = LMProcessor(parameters['max_length'], device=device, output_dir=parameters['output_dir'], dataset_name=parameters['dataset_name'], dataset_dir=parameters['dataset_dir'])
     logging.info("\tDone.")
 
     logging.info("Fetching data (training + validation) and parameters...")
@@ -108,84 +109,73 @@ if __name__=='__main__':
     # Setting environment for the tokenizer not to interefere with future parallelisation
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     logging.info("\tDone.")
-
-    ############ to delete ############
-    data.process_dataset('test')
-    test_examples = processor.get_test_examples(data)
-    test_features = processor.convert_examples_to_features(test_examples, parameters['max_length'], tokenizer, set_type='test')
-    dev_examples = processor.get_dev_examples(data)
-    dev_features = processor.convert_examples_to_features(dev_examples, parameters['max_length'], tokenizer, set_type='dev')
-    test_examples = []
-    test_features = []
-    dev_examples = []
-    dev_features = []
-    train_examples = processor.get_train_examples(data)
-    train_features = processor.convert_examples_to_features(train_examples, parameters['max_length'], tokenizer, set_type='train')
-    ###################################
     
     logging.info("Get input examples...")
-    train_examples = processor.get_train_examples(data)
-    dev_examples = processor.get_dev_examples(data)
-    if parameters['do_test']:
-        test_examples = processor.get_test_examples(data)
+    train_examples_paths = processor.get_train_examples(data)
+    dev_examples_paths = processor.get_dev_examples(data)
     logging.info("\tDone.")
 
     logging.info("Get input features...")
-    train_features = processor.convert_examples_to_features(train_examples, parameters['max_length'], tokenizer, set_type='train')
-    dev_features = processor.convert_examples_to_features(dev_examples, parameters['max_length'], tokenizer, set_type='dev')
-    if parameters['do_test']:
-        test_features = processor.convert_examples_to_features(test_examples, parameters['max_length'], tokenizer, set_type='test')
+    train_features_paths = processor.convert_examples_to_features(train_examples_paths, parameters['max_length'], tokenizer, set_type='train')
+    dev_features_paths = processor.convert_examples_to_features(dev_examples_paths, parameters['max_length'], tokenizer, set_type='dev')
     logging.info("\tDone.")
     
-    logging.info("Creating data loaders...")
-    train_dataloader = processor.get_data_loader(train_features, 
-                                                    batch_size=parameters['batch_size'], 
-                                                    local_rank=parameters['local_rank'], 
-                                                    set_type='train')
-    dev_dataloader = processor.get_data_loader(dev_features, 
-                                                batch_size=parameters['batch_size'], 
-                                                local_rank=parameters['local_rank'], 
-                                                set_type='dev')
-    if parameters['do_test']:
-        test_dataloader = processor.get_data_loader(test_features, 
-                                                    batch_size=parameters['batch_size'], 
-                                                    local_rank=parameters['local_rank'], 
-                                                    set_type='test')
-    logging.info("\tDone.")
-
     logging.info("Creating optimizer and learning rate scheduler...")
     optimizer = AdamW(
                     model.parameters(),
                     lr=float(parameters['learning_rate']),
                     eps=float(parameters['adam_epsilon'])
                 )
-    total_steps = len(train_dataloader) * parameters['nb_epochs'] # Total number of training steps is [nb batches] x [nb epochs]. 
+    nb_splits = 5
+    nb_batches = nb_splits * len(processor.load_object(os.path.join(parameters['dataset_dir'], f"{parameters['dataset_name']}train_features_split-0.pkl")))
+    total_steps = nb_batches * parameters['nb_epochs'] # Total number of training steps is [nb batches] x [nb epochs]. 
     scheduler = get_linear_schedule_with_warmup(
                     optimizer, 
                     num_warmup_steps=parameters['num_warmup_steps'],
                     num_training_steps=total_steps
                 )
     logging.info("\tDone.")
-
+    
     logging.info("Fine-tuning the model.")
+    gc.collect()
     model_processor = ModelProcessor(model, optimizer, tokenizer, 
                                         scheduler, device, 
                                         parameters['metric_name'], 
                                         parameters['nb_epochs'],
                                         parameters['use_output_mask'])
-    training_stats = model_processor.train(train_dataloader, dev_dataloader, parameters['output_dir'])
+    
+    try:
+        training_stats = model_processor.train(processor, train_features_paths, dev_features_paths, parameters['output_dir'], parameters=parameters)
+    except KeyboardInterrupt:
+        print('-' * 89)
+        training_stats = pd.read_csv(os.path.join(parameters['output_dir'], 'training_stats.csv'))
+        print('Exiting from training early')
+    
+    logging.info("Saving fine-tuned model to {}...".format(os.path.join(parameters['output_dir'], 'fine_tuned')))
+    save(model_processor.model, tokenizer, parameters['output_dir'], 'fine_tuned')
+    logging.info("\tDone.")
+    
     logging.info("Validation reports: ")
     for stat in training_stats:
         logging.info(stat['report'])
     test_accuracy, test_loss = None, None
+    
     if parameters['do_test']:
-        logging.info("Evaluation report: ")
-        test_accuracy, test_loss, test_time, report = model_processor.evaluate(test_dataloader) 
-        logging.info(report)
-    logging.info("\tDone.")
+        data.process_dataset('test')
+        test_examples_paths = processor.get_test_examples(data)
+        test_features_paths = processor.convert_examples_to_features(test_examples, parameters['max_length'], tokenizer, set_type='test')
 
-    logging.info("Saving fine-tuned model to {}...".format(os.path.join(parameters['output_dir'], 'fine_tuned')))
-    save(model, tokenizer, parameters['output_dir'], 'fine_tuned')
+        logging.info("Evaluation report: ")
+        test_accuracy, test_loss, test_time, report = model_processor.evaluate(processor, test_features_paths, 'test', parameters) 
+        testing_stats = {
+                    'Test. Loss': test_loss,
+                    'Test. Accur.': test_accuracy,
+                    'Test Time': test_time,
+                    'report': report
+                }
+        df = pd.DataFrame(data=testing_stats)
+        df.to_csv(os.path.join(parameters['output_dir'], 'testing_stats.csv'), index=False)
+        logging.info(report)
     logging.info("\tDone.")
 
     logging.info("Plotting training and validation losses...")

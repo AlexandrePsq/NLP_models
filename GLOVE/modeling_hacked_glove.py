@@ -45,7 +45,7 @@ class Glove(object):
                             'crossly':(['across'], 0), 
                             'mustn':(['must', 'n’t'], 1)} # the second value in the tuple is the number of following words to skip in generate
         for key in self.words2add.keys():
-            self.model[key] = np.zeros((300,))
+            self.model[key] = np.zeros((self.param['embedding_size'],))
             for word in self.words2add[key][0]:
                 self.model[key] += self.model[word]
             self.model[key] = self.model[key] / len(self.words2add[key][0])

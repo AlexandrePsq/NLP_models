@@ -84,39 +84,46 @@ class LMDataset(Dataset):
 class LMProcessor(DataProcessor):
     """Processor for language modeling."""
     
-    def __init__(self, max_seq_length, device='cpu', output_dir='./', dataset_name='', dataset_dir='./'):
+    def __init__(self, max_seq_length, device='cpu', output_dir='./', dataset_name='', dataset_dir='./', n_splits=5):
         self.max_seq_length = max_seq_length
         self.device = device
         self.dataset_name = dataset_name
         self.output_dir = output_dir
         self.dataset_dir = dataset_dir
+        self.n_splits = n_splits
 
     def get_train_examples(self, dataset_object):
         """See base class."""
-        if os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}train_features.pkl')):
-            examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}train_features.pkl'))
-        elif os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}train_examples.pkl')):
-            examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}train_examples.pkl'))
+        if all([os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}train_examples_split-{index_split}.pkl')) for index_split in range(self.n_splits)]):
+            examples = [os.path.join(self.dataset_dir, f'{self.dataset_name}train_examples_split-{index_split}.pkl') for index_split in range(self.n_splits)]
+
+        #elif os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}train_examples.pkl')):
+        #    examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}train_examples.pkl'))
+            
         else:
             examples = self._create_examples(dataset_object.train, "train")
         return examples
 
     def get_dev_examples(self, dataset_object):
         """See base class."""
-        if os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}dev_features.pkl')):
-            examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}dev_features.pkl'))
-        elif os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}dev_examples.pkl')):
-            examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}dev_examples.pkl'))
+        if all([os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}dev_examples_split-{index_split}.pkl')) for index_split in range(self.n_splits)]):
+            examples = [os.path.join(self.dataset_dir, f'{self.dataset_name}dev_examples_split-{index_split}.pkl') for index_split in range(self.n_splits)]
+
+        #elif os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}dev_examples.pkl')):
+        #    examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}dev_examples.pkl'))
+            
         else:
             examples = self._create_examples(dataset_object.dev, "dev")
         return examples
 
     def get_test_examples(self, dataset_object):
         """See base class."""
-        if os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}test_features.pkl')):
-            examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}test_features.pkl'))
-        elif os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}test_examples.pkl')):
-            examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}test_examples.pkl'))
+        if all([os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}test_examples_split-{index_split}.pkl')) for index_split in range(self.n_splits)]):
+            examples = [os.path.join(self.dataset_dir, f'{self.dataset_name}test_examples_split-{index_split}.pkl') for index_split in range(self.n_splits)]
+
+        #elif os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}test_examples.pkl')):
+        #    examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}test_examples.pkl'))
+            
         else:
             examples = self._create_examples(dataset_object.test, "test")
         return examples
@@ -157,11 +164,24 @@ class LMProcessor(DataProcessor):
             sequence = self.tokenizer.encode(' '.join(line)).ids
             return f(i, sequence)
         
-        examples = Parallel(n_jobs=-1)(delayed(g)(index, lines[i:i + step]) for index, i in tqdm(enumerate(range(0, n, step))))
-        self.save_object(os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_examples.pkl'), examples)
+        # Splitting data for memory issues...
+        indexes = list(range(0, n, step))
+        m = len(indexes)
+        n_splits = self.n_splits
+        splits = [indexes[i*m//n_splits: m*(i+1)//n_splits] for i in range(n_splits)]
+        for index_split, split in enumerate(splits):
+            print(f"Computing split {index_split+1} / {n_splits}... Split size: {len(split)}")
+            examples = Parallel(n_jobs=-1)(delayed(g)(index+split[0], lines[i:i + step]) for index, i in tqdm(enumerate(split)))
+            self.save_object(os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_examples_split-{index_split}.pkl'), examples)
+        # Merging
+        #examples = [self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_examples_split-{index_split}.pkl')) for index_split in range(n_splits)]
+        #examples = [item for l in examples for item in l]
+        #self.save_object(os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_examples.pkl'), examples)
         
-        return examples
-    
+        examples_paths = [os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_examples_split-{index_split}.pkl') for index_split in range(n_splits)]
+        
+        return examples_paths
+            
     def pad_to_max_length(self, sequence):
         """Pad sequence to reach max_seq_length"""
         sequence = sequence[:self.max_seq_length]
@@ -194,12 +214,13 @@ class LMProcessor(DataProcessor):
 
         return batches
     
-    def convert_examples_to_features(self, examples, max_seq_length, tokenizer, set_type):
+    def convert_examples_to_features(self, examples_paths, max_seq_length, tokenizer, set_type):
         """Loads a data file into a list of `InputBatch`s.  
         """
         
-        if os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_features.pkl')):
-            features = examples
+        if all([os.path.exists(path.replace('examples', 'features')) for path in examples_paths]):
+            features_paths = examples_paths
+            
         else:
 
             def f(example):
@@ -213,13 +234,26 @@ class LMProcessor(DataProcessor):
                                         label_ids=labels_ids,
                                         output_mask=None)
 
-            features = Parallel(n_jobs=-1)(delayed(f)(example) for example in tqdm(examples))
-            self.save_object(os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_features.pkl'), features)
-                                       
-        return features
-    
-    def get_data_loader(self, features, batch_size, local_rank, set_type):
+            for index_split, examples_split in enumerate(examples_paths):
+                split = self.load_object(examples_split)
+                print(f"Computing split {index_split+1} / {self.n_splits}... Split size: {len(split)}")
+                features = Parallel(n_jobs=-1)(delayed(f)(example) for example in tqdm(split))
+                self.save_object(os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_features_split-{index_split}.pkl'), features)
+
+        features_paths = [os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_features_split-{index_split}.pkl') for index_split in range(self.n_splits)]
+        
+        return features_paths
+        
+    def get_data_loader(self, features_path, batch_size, local_rank, set_type):
         """See base class."""
+        # Loading features split
+        if isinstance(features_path, str):
+            features = self.load_object(features_path)
+        else:
+            features = [self.load_object(path) for path in features_path]
+            features = [item for l in features for item in l]
+        
+        # Creating data loader
         input_ids = torch.cat([f.input_ids for f in features], dim=0)
         attention_mask = torch.cat([f.attention_mask for f in features], dim=0)
         token_type_ids =  torch.cat([f.token_type_ids for f in features], dim=0)

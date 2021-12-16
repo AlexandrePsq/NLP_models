@@ -9,9 +9,7 @@ class Metrics(object):
     def flat_accuracy(cls, y_true, y_pred):
         """ Function to calculate the accuracy of our predictions vs labels
         """
-        pred_flat = np.argmax(y_pred, axis=-1).flatten()
-        labels_flat = y_true.flatten()
-        return np.sum(pred_flat == labels_flat) / len(labels_flat)
+        return np.sum(y_pred == y_true) / len(y_true)
 
     @classmethod
     def report(cls, metric_name, y_true, y_pred):

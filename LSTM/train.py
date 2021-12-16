@@ -70,7 +70,7 @@ def forward(model, train_data, corpus, criterion, epoch, lr, bsz=params['bsz'], 
 
         total_loss += loss.item()
         
-        if (epoch==1 and batch in [1, 2, 5, 10, 15, 30, 50, 100, 200, 500, 1000, 5000]) or batch%10000==0:
+        if ((epoch==1 and batch in [1, 2, 5, 10, 15, 30, 50, 100, 200, 500, 1000, 5000]) or batch%10000==0) and epoch < 15:
             save(model, data_name, language, path2derivatives, extra_name=extra_name+f'_checkpoint_epoch-{epoch}_batch-{batch}')
 
         if batch % params['log_interval'] == 0 and batch > 0:
@@ -129,6 +129,7 @@ def train(config_path, data, data_name, language, eval_batch_size=params['eval_b
             print("Only evaluating the model. No training is done.")
             raise KeyboardInterrupt
         print('Entering training...')
+        save(model, data_name, language, path2derivatives, extra_name=extra_name+f'_checkpoint_epoch-1_batch-0')
         for epoch in tqdm(range(1, epochs+4)):
             if epoch == epochs + 1: # we added 3 more epoch with a smaller lr for tuning
                 lr /= 2.0
