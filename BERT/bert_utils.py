@@ -291,7 +291,7 @@ def transform_sentence_and_context(
                     )) # to replace with tokenizer of interest and arguments
     return batch_tmp, index_tmp
 
-def batchify_per_sentence_with_pre_and_post_context(iterator, number_of_sentence, number_sentence_before, number_sentence_after, pretrained_bert, max_length=512, stop_attention_before_sent=0, stop_attention_at_sent_before=None):
+def batchify_per_sentence_with_pre_and_post_context(iterator, number_of_sentence, number_sentence_before, number_sentence_after, tokenizer, max_length=512, stop_attention_before_sent=0, stop_attention_at_sent_before=None):
     """Batchify iterator sentence, to get batches of specified number of sentences.
     Arguments:
         - iterator: sentence iterator
@@ -307,7 +307,6 @@ def batchify_per_sentence_with_pre_and_post_context(iterator, number_of_sentence
     assert number_of_sentence > 0
     if stop_attention_before_sent > 0:
         stop_attention_at_sent_before += 1
-    tokenizer = BertTokenizer.from_pretrained(pretrained_bert)
     
     batch = []
     indexes = []

@@ -267,7 +267,7 @@ def transform_sentence_and_context(
                     )) # to replace with tokenizer of interest and arguments
     return batch_tmp, index_tmp
 
-def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence_before, pretrained_gpt2, max_length=512, stop_attention_at_sent=None, stop_attention_before_sent=0, add_prefix_space=True):
+def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence_before, tokenizer, max_length=512, stop_attention_at_sent=None, stop_attention_before_sent=0, add_prefix_space=True):
     """Batchify iterator sentence, to get batches of specified number of sentences.
     Arguments:
         - iterator: sentence iterator
@@ -282,7 +282,6 @@ def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence
     assert number_of_sentence > 0
     if stop_attention_before_sent > 0:
         stop_attention_at_sent += 1
-    tokenizer = GPT2Tokenizer.from_pretrained(pretrained_gpt2)
     
     batch = []
     indexes = []
@@ -295,14 +294,20 @@ def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence
         if stop_attention_at_sent is not None:
             while stop < number_sentence_before:
                 stop = min(start + stop_attention_at_sent + number_of_sentence, n)
-                token_count = len(tokenizer.tokenize(' '.join(iterator[start:stop]), add_prefix_space=add_prefix_space))
+                try:
+                    token_count = len(tokenizer.tokenize(' '.join(iterator[start:stop]), add_prefix_space=add_prefix_space))
+                except:
+                    token_count = len(tokenizer.encode(' ' + ' '.join(iterator[start:stop])).tokens)
                 if token_count > max_length:
                     raise ValueError('Cannot fit context with additional sentence. You should reduce context length.')
                 batch.append(' '.join(iterator[start:stop]))
                 beg = 0
                 res = []
                 for item in iterator[start:stop]:
-                    end = len(tokenizer.tokenize(item, add_prefix_space=add_prefix_space)) + beg
+                    try:
+                        end = len(tokenizer.tokenize(item, add_prefix_space=add_prefix_space)) + beg
+                    except:
+                        end = len(tokenizer.encode(' ' + item).tokens) + beg
                     res.append((beg, end))
                     beg = end
                 indexes.append(res)
@@ -311,14 +316,20 @@ def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence
             
         else:
             stop = min(number_sentence_before, n)
-            token_count = len(tokenizer.tokenize(' '.join(iterator[:stop]), add_prefix_space=add_prefix_space))
+            try:
+                token_count = len(tokenizer.tokenize(' '.join(iterator[:stop]), add_prefix_space=add_prefix_space))
+            except:
+                token_count = len(tokenizer.encode(' ' + ' '.join(iterator[:stop])).tokens)
             if token_count > max_length:
                 raise ValueError('Cannot fit context with additional sentence. You should reduce context length.')
             batch.append(' '.join(iterator[:stop]))
             beg = 0
             res = []
             for item in iterator[:stop]:
-                end = len(tokenizer.tokenize(item, add_prefix_space=add_prefix_space)) + beg
+                try:
+                    end = len(tokenizer.tokenize(item, add_prefix_space=add_prefix_space)) + beg
+                except:
+                    end = len(tokenizer.encode(' ' + item).tokens) + beg
                 res.append((beg, end))
                 beg = end
             indexes.append(res)
@@ -327,14 +338,20 @@ def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence
     while sentence_count < n:
         start = sentence_count - number_sentence_before
         stop = min(sentence_count + number_of_sentence, n)
-        token_count = len(tokenizer.tokenize(' '.join(iterator[start:stop]), add_prefix_space=add_prefix_space))
+        try:
+            token_count = len(tokenizer.tokenize(' '.join(iterator[start:stop]), add_prefix_space=add_prefix_space))
+        except:
+            token_count = len(tokenizer.encode(' ' + ' '.join(iterator[start:stop])).tokens)
         if token_count > max_length:
             raise ValueError('Too many context sentence. You reach {} tokens only with context.'.format(token_count))
         batch.append(' '.join(iterator[start:stop]))
         beg = 0
         res = []
         for item in iterator[start:stop]:
-            end = len(tokenizer.tokenize(item, add_prefix_space=add_prefix_space)) + beg
+            try:
+                end = len(tokenizer.tokenize(item, add_prefix_space=add_prefix_space)) + beg
+            except:
+                end = len(tokenizer.encode(' ' + item).tokens) + beg
             res.append((beg, end))
             beg = end
         indexes.append(res)

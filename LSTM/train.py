@@ -11,6 +11,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 
+import utils
 from data import Corpus
 from modeling_hacked_lstm import RNNModel
 from lstm_utils import get_batch, repackage_hidden, batchify, save, load, get_preference_params, read_yaml, save_yaml
@@ -70,7 +71,7 @@ def forward(model, train_data, corpus, criterion, epoch, lr, bsz=params['bsz'], 
 
         total_loss += loss.item()
         
-        if ((epoch==1 and batch in [1, 2, 5, 10, 15, 30, 50, 100, 200, 500, 1000, 5000]) or batch%10000==0) and epoch < 15:
+        if ((epoch in [1, 2, 3] and batch in [1, 2, 5, 10, 15, 30, 50, 100, 200, 500, 1000, 5000]) or batch%10000==0) and epoch < 15:
             save(model, data_name, language, path2derivatives, extra_name=extra_name+f'_checkpoint_epoch-{epoch}_batch-{batch}')
 
         if batch % params['log_interval'] == 0 and batch > 0:
@@ -170,6 +171,9 @@ def train(config_path, data, data_name, language, eval_batch_size=params['eval_b
     print('| End of training | test loss {:5.2f} | test ppl {:8.2f}'.format(
         test_loss, math.exp(test_loss)))
     print('=' * 89)
+    path = '_'.join([model.__name__(), data_name, language]) + f'{extra_name}_test_loss.txt'
+    path = os.path.join(path2derivatives, 'fMRI/models/', language, 'LSTM', path)
+    utils.write(path, '| End of training | test loss {:5.2f} | test ppl {:8.2f}'.format(test_loss, math.exp(test_loss)))
 
     if train_model:
         # plot the perplexity as a function of the number of epochs

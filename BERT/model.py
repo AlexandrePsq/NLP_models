@@ -50,7 +50,8 @@ class BertExtractor(object):
         tokens_vocabulary=None,
         pos_dictionary=None,
         constituent_parsing_level=1,
-        randomize=False
+        randomize=False,
+        pretrained_bert_tokenizer=None
         ):
         super(BertExtractor, self).__init__()
         # Load pre-trained model tokenizer (vocabulary)
@@ -69,7 +70,7 @@ class BertExtractor(object):
             self.model = BertModel.from_pretrained(pretrained_bert_model, config=configuration) #, config=configuration
         else:
             self.model = BertModel.from_pretrained(pretrained_bert_model) #, config=configuration
-        self.tokenizer = BertTokenizer.from_pretrained(pretrained_bert_model)
+        self.tokenizer = BertTokenizer.from_pretrained(pretrained_bert_tokenizer) if pretrained_bert_tokenizer is not None else BertTokenizer.from_pretrained(pretrained_bert_model)
             
         self.language = language
         self.attention_length_before = attention_length_before
@@ -204,11 +205,11 @@ class BertExtractor(object):
                         for word_index in word_indexes:
                             hidden_states_activations_tmp.append(np.mean(np.array([hidden_states_activations_[:, mapping_index, i, :] for i in mapping[word_index]]), axis=0).reshape(1, -1))
                     hidden_states_activations += hidden_states_activations_tmp
-                if self.model.config.output_attentions:
+                if self.config['output_attentions']:
                     raise NotImplementedError('Not yet implemented...')
         if self.model.config.output_hidden_states:
             hidden_states_activations = pd.DataFrame(np.vstack(hidden_states_activations), columns=['hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
-        if self.model.config.output_attentions:
+        if self.config['output_attentions']:
             raise NotImplementedError('Not yet implemented...')
         return [hidden_states_activations, 
                 attention_heads_activations, 
@@ -246,7 +247,7 @@ class BertExtractor(object):
             self.config['number_of_sentence'], 
             self.config['number_of_sentence_before'], 
             self.config['number_of_sentence_after'], 
-            self.pretrained_bert_model, 
+            self.tokenizer, 
             max_length=self.config['max_length']
         )
         
@@ -291,7 +292,7 @@ class BertExtractor(object):
                     #cls_activations_, sep_activations_ = bert_utils.extract_activations_from_special_tokens(hidden_states_activations_, mapping)
                     #cls_hidden_states_activations += cls_activations_
                     #sep_hidden_states_activations += sep_activations_
-                if self.model.config.output_attentions:
+                if self.config['output_attentions']:
                     raise NotImplementedError('Not yet implemented...')
                     #attention_heads_activations_ = np.vstack([array[0].view([
                     #                                            1, 
@@ -306,7 +307,7 @@ class BertExtractor(object):
             hidden_states_activations = pd.DataFrame(np.vstack(hidden_states_activations), columns=['hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
             #cls_hidden_states_activations = pd.DataFrame(np.vstack(cls_hidden_states_activations), columns=['CLS-hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
             #sep_hidden_states_activations = pd.DataFrame(np.vstack(sep_hidden_states_activations), columns=['SEP-hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
-        if self.model.config.output_attentions:
+        if self.config['output_attentions']:
             raise NotImplementedError('Not yet implemented...')
             #attention_heads_activations = pd.DataFrame(np.vstack(attention_heads_activations), columns=['attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in np.arange(1, 1 + self.NUM_HIDDEN_LAYERS) for head in range(1, 1 + self.NUM_ATTENTION_HEADS) for index in range(1, 1 + self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
             ##cls_attention_activations = pd.DataFrame(np.vstack(cls_attention_activations), columns=['CLS-attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in np.arange(1, 1 + self.NUM_HIDDEN_LAYERS) for head in range(1, 1 + self.NUM_ATTENTION_HEADS) for index in range(1, 1 + self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
@@ -339,7 +340,7 @@ class BertExtractor(object):
             self.config['number_of_sentence'], 
             self.config['number_of_sentence_before'], 
             self.config['number_of_sentence_after'], 
-            self.pretrained_bert_model, 
+            self.tokenizer, 
             max_length=self.config['max_length'])
         
         indexes_tmp = []
@@ -407,7 +408,7 @@ class BertExtractor(object):
                     #cls_activations_, sep_activations_ = bert_utils.extract_activations_from_special_tokens(hidden_states_activations_, mapping)
                     #cls_hidden_states_activations += cls_activations_
                     #sep_hidden_states_activations += sep_activations_
-                if self.model.config.output_attentions:
+                if self.config['output_attentions']:
                     raise NotImplementedError('Not yet implemented...')
                     #attention_heads_activations_ = np.vstack([torch.cat([encoded_layers[-1][layer][0][i,len(tokenized_text) - encoded_layers[-1][layer][0].size(0) + i,:].unsqueeze(0) for i in range(encoded_layers[-1][layer][0].size(0))], dim=0).unsqueeze(0).detach().numpy() for layer in range(len(encoded_layers[-1]))])
                     #if indexes_tmp[index_batch][0] > 0:
@@ -426,7 +427,7 @@ class BertExtractor(object):
             hidden_states_activations = pd.DataFrame(np.vstack(hidden_states_activations), columns=['hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
             #cls_hidden_states_activations = pd.DataFrame(np.vstack(cls_hidden_states_activations), columns=['CLS-hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
             #sep_hidden_states_activations = pd.DataFrame(np.vstack(sep_hidden_states_activations), columns=['SEP-hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
-        if self.model.config.output_attentions:
+        if self.config['output_attentions']:
             raise NotImplementedError('Not yet implemented...')
             #attention_heads_activations = pd.DataFrame(np.vstack(attention_heads_activations), columns=['attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in np.arange(1, 1 + self.NUM_HIDDEN_LAYERS) for head in range(1, 1 + self.NUM_ATTENTION_HEADS) for index in range(1, 1 + self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
             #cls_attention_activations = pd.DataFrame(np.vstack(cls_attention_activations), columns=['CLS-attention-layer-{}-head-{}-{}'.format(layer, head, index) for layer in np.arange(1, 1 + self.NUM_HIDDEN_LAYERS) for head in range(1, 1 + self.NUM_ATTENTION_HEADS) for index in range(1, 1 + self.FEATURE_COUNT // self.NUM_ATTENTION_HEADS)])
@@ -487,13 +488,13 @@ class BertExtractor(object):
                     hidden_states_activations_ = np.vstack(encoded_layers[2]) # retrieve all the hidden states (dimension = layer_count * len(tokenized_text) * feature_count)
                     hidden_states_activations += bert_utils.extract_activations_from_token_activations(hidden_states_activations_, mapping, indexes[index_batch]) #verify if we have to add 1 to indexes values
 
-                if self.model.config.output_attentions:
+                if self.config['output_attentions']:
                     raise NotImplementedError('Not yet implemented...')
 
         if self.model.config.output_hidden_states:
             hidden_states_activations = pd.DataFrame(np.vstack(hidden_states_activations), columns=['hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
         
-        if self.model.config.output_attentions:
+        if self.config['output_attentions']:
             raise NotImplementedError('Not yet implemented...')
         
         return [hidden_states_activations, 

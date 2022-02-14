@@ -21,7 +21,7 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-from tokenizers import BertWordPieceTokenizer
+from tokenizers import BertWordPieceTokenizer, Tokenizer
 from transformers import BertForQuestionAnswering, AdamW, BertConfig, get_linear_schedule_with_warmup
 from transformers import BertForNextSentencePrediction, BertForSequenceClassification, BertForTokenClassification, BertForMaskedLM
 from transformers import BertTokenizer, BertModel, BertForPreTraining, BertForMaskedLM, WEIGHTS_NAME, CONFIG_NAME
@@ -127,11 +127,25 @@ if __name__=='__main__':
                         limit_alphabet=parameters['limit_alphabet'], #1000 
                         wordpieces_prefix="##")
         tokenizer.enable_truncation(max_length=512)
-        tokenizer.save_model(parameters['output_dir'], parameters['dataset_name'] + 'tokenizer')
-        processor.set_tokenizer(tokenizer)
+        #tokenizer.save_model(os.path.join(parameters['output_dir'], parameters['dataset_name'] + 'tokenizer'))
+        #tokenizer.save(os.path.join(parameters['output_dir'], parameters['dataset_name'] + 'tokenizer', 'tokenizer.json'))
+        #tokenizer.save_pretrained(os.path.join(parameters['output_dir'], parameters['dataset_name'] + 'tokenizer'))
         print(tokenizer.encode("[CLS] [MASK] . [UNK] [SEP] [PAD]").ids) # --> [2, 4, 12, 1, 3, 0]
     else:
-        tokenizer = BertTokenizer.from_pretrained(parameters['pretrained_tokenizer'])
+        tokenizer = Tokenizer.from_file(os.path.join(parameters['output_dir'], parameters['dataset_name'] + 'tokenizer', 'tokenizer.json'))
+
+    processor.set_tokenizer(tokenizer)
+    if parameters['start_epoch'] > 0:
+        path = sorted(glob.glob(os.path.join(parameters['output_dir'], 'end-epoch-*')))
+        if len(path)==0:
+            path = sorted(glob.glob(os.path.join(parameters['output_dir'], 'start-epoch-*')))
+        path = path[-1]
+        print(f'Using model saved at: {path}...')
+        model = BertForMaskedLM.from_pretrained(
+                        path,
+                        output_attentions=parameters['output_attentions'], # Whether the model returns attentions weights.
+                        output_hidden_states=parameters['output_hidden_states'], # Whether the model returns all hidden-states.
+        )
     model.to(device)
     # Setting environment for the tokenizer not to interefere with future parallelisation
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -173,18 +187,32 @@ if __name__=='__main__':
                                         parameters['use_output_mask'])
     
     try:
-        training_stats = model_processor.train(processor, train_features_paths, dev_features_paths, parameters['output_dir'], parameters=parameters)
+        if parameters['do_train']:
+            training_stats = model_processor.train(processor, train_features_paths, dev_features_paths, parameters['output_dir'], parameters=parameters)
+            
+            logging.info("Saving fine-tuned model to {}...".format(os.path.join(parameters['output_dir'], 'fine_tuned')))
+            name = f"started_at_{parameters['init_checkpoints']}_fine_tuned" if parameters['init_checkpoints'] > 0 else 'fine_tuned'
+            save(model_processor.model, tokenizer, parameters['output_dir'], name)
+            logging.info("\tDone.")
+        
+        else:
+            path = sorted(glob.glob(os.path.join(parameters['output_dir'], 'fine_tuned*')))[-1]
+            print(f'Using model saved at: {path}...')
+            model_processor.model = BertForMaskedLM.from_pretrained(
+                            path,
+                            output_attentions=parameters['output_attentions'], # Whether the model returns attentions weights.
+                            output_hidden_states=parameters['output_hidden_states'], # Whether the model returns all hidden-states.
+            )
+            model_processor.model.to(device)
+            training_stats = pd.read_csv(os.path.join(parameters['output_dir'], 'training_stats.csv'))
+            
     except KeyboardInterrupt:
         print('-' * 89)
         training_stats = pd.read_csv(os.path.join(parameters['output_dir'], 'training_stats.csv'))
         print('Exiting from training early')
     
-    logging.info("Saving fine-tuned model to {}...".format(os.path.join(parameters['output_dir'], 'fine_tuned')))
-    save(model_processor.model, tokenizer, parameters['output_dir'], 'fine_tuned')
-    logging.info("\tDone.")
-    
     logging.info("Validation reports: ")
-    for stat in training_stats:
+    for epoch, stat in training_stats.iterrows():
         logging.info(stat['report'])
     test_accuracy, test_loss = None, None
     
@@ -195,15 +223,15 @@ if __name__=='__main__':
 
         logging.info("Evaluation report: ")
         test_accuracy, test_loss, test_time, report = model_processor.evaluate(processor, test_features_paths, 'test', parameters) 
-        testing_stats = {
+        testing_stats = [{
                     'Test. Loss': test_loss,
                     'Test. Accur.': test_accuracy,
                     'Test Time': test_time,
                     'report': report
-                }
+                }]
         df = pd.DataFrame(data=testing_stats)
         df.to_csv(os.path.join(parameters['output_dir'], 'testing_stats.csv'), index=False)
-        logging.info(report)
+        logging.info(df['report'].iloc[0])
     logging.info("\tDone.")
     
     logging.info("Plotting training and validation losses...")

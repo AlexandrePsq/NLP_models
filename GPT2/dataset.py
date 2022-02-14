@@ -8,7 +8,7 @@ import os
 class Dataset(object):
     """Base class for dataset fetching and formatting."""
 
-    def __init__(self, task_name, dataset_name, dataset_dir=None, url=None):
+    def __init__(self, task_name, dataset_name, dataset_dir=None, url=None, extra=''):
         self.task = task_name
         self.dataset_name = dataset_name.lower()
         self.dataset_dir = dataset_dir
@@ -16,6 +16,7 @@ class Dataset(object):
         self.train = None
         self.test = None
         self.dev = None
+        self.extra = extra
 
     def _fetch_dataset(self):
         """Fetch dataset."""

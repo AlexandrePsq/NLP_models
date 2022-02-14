@@ -30,7 +30,10 @@ class LSTMExtractor(object):
         assert memory_size > 0
         utils.set_seed(seed)
         if randomize:
-            parameters = utils.read_yaml(config_path)
+            try:
+                parameters = utils.read_yaml(config_path)
+            except:
+                parameters = config_path
             self.model = RNNModel(output_hidden_states=output_hidden_states, **parameters)
             if output_hidden_states:
                 self.model.rnn.forward = lambda input, hidden: utils.forward(self.model.rnn, input, hidden, self.model.param)

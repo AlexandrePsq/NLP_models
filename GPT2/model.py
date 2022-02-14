@@ -40,15 +40,19 @@ class GPT2Extractor(object):
         tokens_vocabulary=None,
         pos_dictionary=None,
         prediction=False,
-        randomize=False
+        randomize=False,
+        pretrained_gpt2_tokenizer=None
         ):
         super(GPT2Extractor, self).__init__()
-        self.tokenizer = GPT2Tokenizer.from_pretrained(pretrained_gpt2_model)
+        self.tokenizer = GPT2Tokenizer.from_pretrained(pretrained_gpt2_tokenizer) if isinstance(pretrained_gpt2_tokenizer, str) else (pretrained_gpt2_tokenizer if pretrained_gpt2_tokenizer is not None else GPT2Tokenizer.from_pretrained(pretrained_gpt2_model))
         gpt2_utils.set_seed(seed)
         if randomize:
             parameters = gpt2_utils.read_yaml(config_path)
             parameters['layer_norm_epsilon'] = float(parameters['layer_norm_epsilon'])
-            self.model = GPT2Model(GPT2Config(**parameters, pad_token_id=self.tokenizer.eos_token_id))
+            try:
+                self.model = GPT2Model(GPT2Config(**parameters, pad_token_id=self.tokenizer.eos_token_id))
+            except:
+                self.model = GPT2Model(GPT2Config(**parameters, pad_token_id=1))
             
         elif prediction:
             self.model = GPT2LMHeadModel.from_pretrained(pretrained_gpt2_model, 
@@ -56,10 +60,16 @@ class GPT2Extractor(object):
                                                     output_attentions=output_attentions,
                                                     pad_token_id=self.tokenizer.eos_token_id)
         else:
-            self.model = GPT2Model.from_pretrained(pretrained_gpt2_model, 
+            try:
+                self.model = GPT2Model.from_pretrained(pretrained_gpt2_model, 
+                                                        output_hidden_states=output_hidden_states, 
+                                                        output_attentions=output_attentions,
+                                                        pad_token_id=self.tokenizer.eos_token_id)
+            except:
+                self.model = GPT2Model.from_pretrained(pretrained_gpt2_model, 
                                                     output_hidden_states=output_hidden_states, 
                                                     output_attentions=output_attentions,
-                                                    pad_token_id=self.tokenizer.eos_token_id)
+                                                    pad_token_id=1)
         self.language = language
         self.attention_length_before = attention_length_before
         self.pretrained_gpt2_model = pretrained_gpt2_model
@@ -79,9 +89,10 @@ class GPT2Extractor(object):
                         'pos_dictionary': pos_dictionary,
                         'seed': seed,
                         }
-        if config_path is not None:
-            parameters = gpt2_utils.read_yaml(config_path)
-            self.config.update(parameters)
+        if (config_path is not None) and (not os.path.isdir(config_path)):
+            with open(config_path, 'r') as f:  
+                self.config.update(json.load(f))
+
         self.prediction_type = prediction_type # ['sentence', 'token-level']
 
     def __name__(self):
@@ -197,7 +208,7 @@ class GPT2Extractor(object):
             iterator, 
             self.config['number_of_sentence'], 
             self.config['number_of_sentence_before'], 
-            self.pretrained_gpt2_model, 
+            self.tokenizer, 
             max_length=self.config['max_length'],
             add_prefix_space=self.add_prefix_space
             )
@@ -209,11 +220,18 @@ class GPT2Extractor(object):
 
         for index, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
-            batch = '<|endoftext|> ' + batch + ' <|endoftext|>'
-
-            tokenized_text = self.tokenizer.tokenize(batch, add_prefix_space=False)
-            mapping = gpt2_utils.match_tokenized_to_untokenized(tokenized_text, batch)
-            inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
+            
+            try:
+                batch = '<|endoftext|> ' + batch + ' <|endoftext|>' # /!\ depend of the tokenizer used /!\
+                tokenized_text = self.tokenizer.tokenize(batch, add_prefix_space=False)
+                mapping = gpt2_utils.match_tokenized_to_untokenized(tokenized_text, batch)
+                inputs_ids = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenized_text)])
+            except:
+                batch = batch.replace('<|endoftext|> ', '').replace(' <|endoftext|>', '')
+                batch = '<s> ' + batch + ' </s>' # /!\ depend of the tokenizer used /!\
+                tokenized_text = self.tokenizer.encode(batch).tokens
+                mapping = gpt2_utils.match_tokenized_to_untokenized(tokenized_text, batch, eos_token='</s>')
+                inputs_ids = torch.tensor([self.tokenizer.encode(batch).ids])
             
             if self.prediction_type == 'sentence':
                 attention_mask = torch.tensor([[1 for x in tokenized_text]])
@@ -256,7 +274,7 @@ class GPT2Extractor(object):
             iterator, 
             self.config['number_of_sentence'], 
             self.config['number_of_sentence_before'], 
-            self.pretrained_gpt2_model, 
+            self.tokenizer, 
             max_length=self.config['max_length'],
             add_prefix_space=self.add_prefix_space
         )
@@ -268,7 +286,8 @@ class GPT2Extractor(object):
             
         for index_batch, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
-            batch = '<|endoftext|> ' + batch + ' <|endoftext|>'
+            #batch = '<|endoftext|> ' + batch + ' <|endoftext|>'
+            batch = '<s> ' + batch + ' </s>'
 
             tokenized_text = self.tokenizer.tokenize(batch, add_prefix_space=False)
             mapping = gpt2_utils.match_tokenized_to_untokenized(tokenized_text, batch)
@@ -340,7 +359,9 @@ class GPT2Extractor(object):
         for index_batch, batch in enumerate(batches):
             batch = batch.strip() # Remove trailing character
 
-            batch = '<|endoftext|> ' + batch + ' <|endoftext|>'
+            #batch = '<|endoftext|> ' + batch + ' <|endoftext|>'
+            batch = '<s> ' + batch + ' </s>'
+            
             tokenized_text = self.tokenizer.tokenize(batch, add_prefix_space=False)
             #print('Batch number: ', index_batch, ' - ' , batch)
             #print(tokenized_text)

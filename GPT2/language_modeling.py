@@ -27,8 +27,8 @@ from joblib import Parallel, delayed
 class LMDataset(Dataset):
     """Class for language modeling dataset fetching and formatting."""
 
-    def __init__(self, task_name, dataset_name, dataset_dir=None, url=None, language='english'):
-        super(LMDataset, self).__init__(task_name, dataset_name, dataset_dir, url)
+    def __init__(self, task_name, dataset_name, dataset_dir=None, url=None, language='english', extra=''):
+        super(LMDataset, self).__init__(task_name, dataset_name, dataset_dir, url, extra=extra)
         self.language = language
 
     def _fetch_dataset(self):
@@ -48,12 +48,12 @@ class LMDataset(Dataset):
     def process_gutenberg(self, set_type):
         """Process Gutenberg dataset.
         The result is an iterator of tuples (sentence, label)."""
-        if not os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}train_examples.pkl')):
-            self.train = open(os.path.join(self.dataset_dir, f'{self.dataset_name}train.txt'), 'r').read().lower().split(' \n ')
-        if not os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}test_examples.pkl')):
-            self.test = open(os.path.join(self.dataset_dir, f'{self.dataset_name}test.txt'), 'r').read().lower().split(' \n ')
-        if not os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}dev_examples.pkl')):
-            self.dev = open(os.path.join(self.dataset_dir, f'{self.dataset_name}dev.txt'), 'r').read().lower().split(' \n ')
+        if not os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}{self.extra}train_examples.pkl')):
+            self.train = open(os.path.join(self.dataset_dir, f'{self.dataset_name}{self.extra}train.txt'), 'r').read().lower().split(' \n ')
+        if not os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}{self.extra}test_examples.pkl')):
+            self.test = open(os.path.join(self.dataset_dir, f'{self.dataset_name}{self.extra}test.txt'), 'r').read().lower().split(' \n ')
+        if not os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}{self.extra}dev_examples.pkl')):
+            self.dev = open(os.path.join(self.dataset_dir, f'{self.dataset_name}{self.extra}dev.txt'), 'r').read().lower().split(' \n ')
           
 
     def process_lpp(self, set_type):
@@ -84,18 +84,20 @@ class LMDataset(Dataset):
 class LMProcessor(DataProcessor):
     """Processor for language modeling."""
     
-    def __init__(self, max_seq_length, device='cpu', output_dir='./', dataset_name='', dataset_dir='./', n_splits=5):
+    def __init__(self, max_seq_length, device='cpu', output_dir='./', dataset_name='', dataset_dir='./', n_splits=5, context_size=None, extra=''):
         self.max_seq_length = max_seq_length
         self.device = device
         self.dataset_name = dataset_name
         self.output_dir = output_dir
         self.dataset_dir = dataset_dir
         self.n_splits = n_splits
+        self.context_size=context_size
+        self.extra = extra
 
     def get_train_examples(self, dataset_object):
         """See base class."""
-        if all([os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}train_examples_split-{index_split}.pkl')) for index_split in range(self.n_splits)]):
-            examples = [os.path.join(self.dataset_dir, f'{self.dataset_name}train_examples_split-{index_split}.pkl') for index_split in range(self.n_splits)]
+        if all([os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}{self.extra}train_examples_split-{index_split}.pkl')) for index_split in range(self.n_splits)]):
+            examples = [os.path.join(self.dataset_dir, f'{self.dataset_name}{self.extra}train_examples_split-{index_split}.pkl') for index_split in range(self.n_splits)]
 
         #elif os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}train_examples.pkl')):
         #    examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}train_examples.pkl'))
@@ -106,8 +108,8 @@ class LMProcessor(DataProcessor):
 
     def get_dev_examples(self, dataset_object):
         """See base class."""
-        if all([os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}dev_examples_split-{index_split}.pkl')) for index_split in range(self.n_splits)]):
-            examples = [os.path.join(self.dataset_dir, f'{self.dataset_name}dev_examples_split-{index_split}.pkl') for index_split in range(self.n_splits)]
+        if all([os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}{self.extra}dev_examples_split-{index_split}.pkl')) for index_split in range(self.n_splits)]):
+            examples = [os.path.join(self.dataset_dir, f'{self.dataset_name}{self.extra}dev_examples_split-{index_split}.pkl') for index_split in range(self.n_splits)]
 
         #elif os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}dev_examples.pkl')):
         #    examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}dev_examples.pkl'))
@@ -118,8 +120,8 @@ class LMProcessor(DataProcessor):
 
     def get_test_examples(self, dataset_object):
         """See base class."""
-        if all([os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}test_examples_split-{index_split}.pkl')) for index_split in range(self.n_splits)]):
-            examples = [os.path.join(self.dataset_dir, f'{self.dataset_name}test_examples_split-{index_split}.pkl') for index_split in range(self.n_splits)]
+        if all([os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}{self.extra}test_examples_split-{index_split}.pkl')) for index_split in range(self.n_splits)]):
+            examples = [os.path.join(self.dataset_dir, f'{self.dataset_name}{self.extra}test_examples_split-{index_split}.pkl') for index_split in range(self.n_splits)]
 
         #elif os.path.exists(os.path.join(self.dataset_dir, f'{self.dataset_name}test_examples.pkl')):
         #    examples = self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}test_examples.pkl'))
@@ -172,13 +174,13 @@ class LMProcessor(DataProcessor):
         for index_split, split in enumerate(splits):
             print(f"Computing split {index_split+1} / {n_splits}... Split size: {len(split)}")
             examples = Parallel(n_jobs=-1)(delayed(g)(index+split[0], lines[i:i + step]) for index, i in tqdm(enumerate(split)))
-            self.save_object(os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_examples_split-{index_split}.pkl'), examples)
+            self.save_object(os.path.join(self.dataset_dir, f'{self.dataset_name}{self.extra}{set_type}_examples_split-{index_split}.pkl'), examples)
         # Merging
         #examples = [self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_examples_split-{index_split}.pkl')) for index_split in range(n_splits)]
         #examples = [item for l in examples for item in l]
         #self.save_object(os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_examples.pkl'), examples)
         
-        examples_paths = [os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_examples_split-{index_split}.pkl') for index_split in range(n_splits)]
+        examples_paths = [os.path.join(self.dataset_dir, f'{self.dataset_name}{self.extra}{set_type}_examples_split-{index_split}.pkl') for index_split in range(n_splits)]
         
         return examples_paths
             
@@ -219,15 +221,18 @@ class LMProcessor(DataProcessor):
         """
         
         if all([os.path.exists(path.replace('examples', 'features')) for path in examples_paths]):
+            # Not used ...
             features_paths = examples_paths
             
         else:
-
+            
             def f(example):
-                labels_ids = torch.FloatTensor(example.label)[1:].unsqueeze(0).to(torch.int64)
-                input_ids = torch.FloatTensor(example.text_a)[:-1].unsqueeze(0).to(torch.int64)
-                attention_mask = torch.ones(input_ids.size()).to(torch.int64)
-                token_type_ids = torch.zeros(input_ids.size()).to(torch.int64)
+                #labels_ids = torch.FloatTensor(example.label)[1:].unsqueeze(0).to(torch.int32)
+                #input_ids = torch.FloatTensor(example.text_a)[:-1].unsqueeze(0).to(torch.int32)
+                labels_ids = torch.FloatTensor(example.label).unsqueeze(0).to(torch.int32)
+                input_ids = torch.FloatTensor(example.text_a).unsqueeze(0).to(torch.int32)
+                attention_mask = None #attention_mask_from_inputs(input_ids, self.context_size)
+                token_type_ids = torch.zeros(input_ids.size()).to(torch.int32)
                 return InputFeatures(input_ids=input_ids,
                                         attention_mask=attention_mask,
                                         token_type_ids=token_type_ids,
@@ -238,9 +243,9 @@ class LMProcessor(DataProcessor):
                 split = self.load_object(examples_split)
                 print(f"Computing split {index_split+1} / {self.n_splits}... Split size: {len(split)}")
                 features = Parallel(n_jobs=-1)(delayed(f)(example) for example in tqdm(split))
-                self.save_object(os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_features_split-{index_split}.pkl'), features)
+                self.save_object(os.path.join(self.dataset_dir, f'{self.dataset_name}{self.extra}{set_type}_features_split-{index_split}.pkl'), features)
 
-        features_paths = [os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_features_split-{index_split}.pkl') for index_split in range(self.n_splits)]
+        features_paths = [os.path.join(self.dataset_dir, f'{self.dataset_name}{self.extra}{set_type}_features_split-{index_split}.pkl') for index_split in range(self.n_splits)]
         
         return features_paths
         
@@ -255,10 +260,10 @@ class LMProcessor(DataProcessor):
         
         # Creating data loader
         input_ids = torch.cat([f.input_ids for f in features], dim=0)
-        attention_mask = torch.cat([f.attention_mask for f in features], dim=0)
+        #attention_mask = None #torch.cat([f.attention_mask for f in features], dim=0)
         token_type_ids =  torch.cat([f.token_type_ids for f in features], dim=0)
         label_ids =  torch.cat([f.label_ids for f in features], dim=0)
-        data = TensorDataset(input_ids, attention_mask, token_type_ids, label_ids)
+        data = TensorDataset(input_ids, token_type_ids, label_ids) # attention_mask were removed !
         if set_type=='train':
             if local_rank == -1:
                 sampler = RandomSampler(data)
