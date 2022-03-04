@@ -71,7 +71,9 @@ class LSTMExtractor(object):
         """
         self.model.eval()
         parameters = sorted(self.config['parameters'])
+        columns_embeddings = ['embedding-{}'.format(i) for i in range(1, 1 + self.FEATURE_COUNT)]
         columns_activations = ['{}-layer-{}-{}'.format(name, layer, i) for name in parameters for layer in range(1, 1 + self.NUM_HIDDEN_LAYERS) for i in range(1, 1 + self.FEATURE_COUNT)]
+        embeddings = []
         activations = []
         surprisals = []
         entropies = []
@@ -99,14 +101,16 @@ class LSTMExtractor(object):
                 if item=='<eos>':
                     correction -= 1
                 else:
+                    embeddings.append(self.model.encoder.weight[self.model.vocab.word2idx[item], :].detach().numpy())
                     activations.append(activation)
                     surprisals.append(surprisal)
                     entropies.append(entropy)
 
+        embeddings_df = pd.DataFrame(np.vstack(embeddings), columns=columns_embeddings)
         activations_df = pd.DataFrame(np.vstack(activations), columns=columns_activations)
         surprisals_df = pd.DataFrame(np.vstack(surprisals), columns=['surprisal'])
         entropies_df = pd.DataFrame(np.vstack(entropies), columns=['entropy'])
-        result = pd.concat([activations_df, surprisals_df], axis = 1) if self.config['includ_surprisal'] else activations_df
+        result = pd.concat([embeddings_df, activations_df, surprisals_df], axis = 1) if self.config['includ_surprisal'] else pd.concat([embeddings_df, activations_df], axis = 1)
         result = pd.concat([result, entropies_df], axis = 1) if self.config['includ_entropy'] else result
         return result
     

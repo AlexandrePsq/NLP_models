@@ -51,7 +51,19 @@ def save_file(filename, data):
     """Read a pickled object."""
     with open(filename, 'wb') as outp:  # Overwrites any existing file.
         pickle.dump(data, outp, pickle.HIGHEST_PROTOCOL)
+        
+def to_features(example):
+    labels_ids = torch.FloatTensor(example.label).unsqueeze(0).to(torch.int32)
+    input_ids = torch.FloatTensor(example.text_a).unsqueeze(0).to(torch.int32)
+    attention_mask = None #attention_mask_from_inputs(input_ids, self.context_size)
+    token_type_ids = torch.zeros(input_ids.size()).to(torch.int32)
+    return InputFeatures(input_ids=input_ids,
+                            attention_mask=attention_mask,
+                            token_type_ids=token_type_ids,
+                            label_ids=labels_ids,
+                            output_mask=None)
 
+    
 #### Variables ####
 data_path = '/neurospin/unicog/protocols/IRMf/LePetitPrince_Pallier_2018/LePetitPrince/data/text/english/all_training' # path to data folder
 language = 'english'
@@ -64,7 +76,8 @@ if __name__=='__main__':
     parser.add_argument("--split", type=int) 
     parser.add_argument("--context_size", type=int)
     parser.add_argument("--max_seq_length", type=int)
-    parser.add_argument("--merge", type=bool, default=False)    
+    parser.add_argument("--merge", type=bool, default=False)
+    parser.add_argument("--compute_feature", type=bool, default=False)
     
     args = parser.parse_args()
     
@@ -72,24 +85,41 @@ if __name__=='__main__':
     
     if args.merge:
         print('Merging')
-        files = sorted(glob.glob(os.path.join(data_path, f'gpt2_context-{args.context_size}_{args.set_type}_examples_split-{args.split}_*.pkl')))
+        if args.compute_feature:
+            files = sorted(glob.glob(os.path.join(data_path, f'gpt2_context-{args.context_size}_{args.set_type}_features_split-{args.split}_*.pkl')))
+        else:
+            files = sorted(glob.glob(os.path.join(data_path, f'gpt2_context-{args.context_size}_{args.set_type}_examples_split-{args.split}_*.pkl')))
         print(f'Loading {len(files)} files...')
         data = [read_file(filename) for filename in tqdm(files)]
         print(f'{len(data)} files with {len(data[0])} object in them.')
         print('Flattening...')
         data = [i for l in data for i in l]
         print('Saving...')
-        save_file(os.path.join(data_path, f'gpt2_context-{args.context_size}_{args.set_type}_examples_split-{args.split}.pkl'), data)
+        if args.compute_feature:
+            save_file(os.path.join(data_path, f'gpt2_context-{args.context_size}_{args.set_type}_features_split-{args.split}.pkl'), data)
+        else:
+            save_file(os.path.join(data_path, f'gpt2_context-{args.context_size}_{args.set_type}_examples_split-{args.split}.pkl'), data)
         print('Merged.')
         print('Cleaning...')
         for filename in files:
             os.remove(filename)
-        print('Done.')
         
+    elif args.compute_feature:
+        split = read_file(os.path.join(data_path, f'gpt2_context-{args.context_size}_{args.set_type}_examples_split-{args.split}.pkl'))
+        
+        n = len(split)
+        start = args.index * n // args.divide_into
+        stop = (args.index + 1) * n // args.divide_into
+
+        split = split[start:stop]
+        print(f'Processing {len(split)}...')
+                            
+        features = [to_features(example) for example in tqdm(split)]
+        save_file(os.path.join(data_path, f'gpt2_context-{args.context_size}_{args.set_type}_features_split-{args.split}_{args.index}.pkl'), features)
+
     else:
     
         filename = os.path.join(data_path, f'gpt2_context-{args.context_size}_{args.set_type}_all-ids_split-{args.split}.pkl')
-
         data = read_file(filename)
 
         n = len(data)
@@ -105,5 +135,5 @@ if __name__=='__main__':
 
         save_file(os.path.join(data_path, f'gpt2_context-{args.context_size}_{args.set_type}_examples_split-{args.split}_{args.index}.pkl'), examples)
         
-        print('Done')
+    print('Done')
 
