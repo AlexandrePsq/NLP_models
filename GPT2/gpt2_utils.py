@@ -101,6 +101,24 @@ def set_seed(value=1111):
 ########## Specific functions ###########
 #########################################
 
+def batchify(tokens, max_length):
+    """Batchify tokens list into sequence of max_length using a sliding window.
+    """
+    result = []
+    for i, _ in enumerate(tokens[:-max_length]):
+        result.append(tokens[i: i+max_length])
+    return result
+
+def pad_to_max_length(sequence, max_seq_length):
+    """Pad sequence to reach max_seq_length"""
+    sequence = sequence[:max_seq_length]
+    n = len(sequence)
+    result = sequence + [225, 1] * ((max_seq_length - n)// 2)
+    if len(result)==max_seq_length:
+        return result
+    else:
+        return result + [225]
+
 def save(model, tokenizer, output_dir, index):
     """ Saving best-practices: if you use defaults names for the model, 
     you can reload it using from_pretrained().

@@ -99,7 +99,7 @@ if __name__=='__main__':
                         min_frequency=parameters['min_frequency'], 
                         show_progress=True, 
                         special_tokens=["<s>", "<pad>", "</s>", "<unk>", "<mask>"])
-        tokenizer.enable_truncation(max_length=512)
+        #tokenizer.enable_truncation(max_length=512)
         #tokenizer.save_model(os.path.join(parameters['output_dir'], parameters['dataset_name'] + 'tokenizer'))
         #tokenizer.save(os.path.join(parameters['output_dir'], parameters['dataset_name'] + 'tokenizer', 'tokenizer.json'))
         #tokenizer.save_pretrained(os.path.join(parameters['output_dir'], parameters['dataset_name'] + 'tokenizer'))
@@ -126,6 +126,15 @@ if __name__=='__main__':
     logging.info("\tDone.")
     
     logging.info("Get input examples...")
+    ###### TEST
+    #data.process_dataset('test')
+    #test_examples_paths = processor.get_test_examples(data)
+    #test_features_paths = processor.convert_examples_to_features(test_examples_paths, parameters['max_length'], tokenizer, set_type='test')
+    #dev_examples_paths = processor.get_dev_examples(data)
+    #dev_features_paths = processor.convert_examples_to_features(dev_examples_paths, parameters['max_length'], tokenizer, set_type='dev')
+    #train_examples_paths = processor.get_train_examples(data)
+    #train_features_paths = processor.convert_examples_to_features(train_examples_paths, parameters['max_length'], tokenizer, set_type='train')
+    ######
     train_examples_paths = processor.get_train_examples(data)
     dev_examples_paths = processor.get_dev_examples(data)
     logging.info("\tDone.")

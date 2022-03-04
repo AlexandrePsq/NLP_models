@@ -81,12 +81,12 @@ class ModelProcessor(object):
         """Compute the attention mask for each input_ids batch.
         """
         if context_size is None:
-            attention_mask = torch.ones(input_ids.size()).to(torch.int32)
+            attention_mask = torch.ones(input_ids.size()).to(torch.int64)
         else:
             attention_mask =  torch.diag_embed(torch.tensor([0 for x in range(input_ids.size(-1))])) 
             for i in range(min(input_ids.size(-1), context_size + 1)): # Adding 1 so that context==0 is only the current word
                 attention_mask = torch.add(attention_mask, torch.diag_embed(torch.tensor([1 for x in range(input_ids.size(-1) - i)]), offset=-i))
-            attention_mask = attention_mask.unsqueeze(0).repeat(input_ids.size(0), 1, 1).to(torch.int32)
+            attention_mask = attention_mask.unsqueeze(0).repeat(input_ids.size(0), 1, 1).to(torch.int64)
         return attention_mask
 
 
@@ -110,7 +110,8 @@ class ModelProcessor(object):
         #   [2]: labels 
         input_ids = batch[0].to(torch.int64).to(self.device)
         #attention_mask = batch[1].to(self.device)
-        attention_mask = self.attention_mask_from_inputs(batch[0], self.context_size).to(torch.int64).to(self.device)
+        #attention_mask = self.attention_mask_from_inputs(batch[0], self.context_size).to(torch.int64).to(self.device)
+        attention_mask = torch.ones(batch[0].size()).to(torch.int64).to(self.device)
         token_type_ids = batch[1].to(torch.int64).to(self.device)
         labels_ids = batch[2].to(torch.int64).to(self.device)
 
@@ -173,7 +174,7 @@ class ModelProcessor(object):
                 self.model.train()
 
                 for split_index, batch_path in enumerate(train_features_paths):
-                    logging.info(f"Creating training data loader for split {split_index}..")
+                    logging.info(f"[{utils.get_timestamp()}] - Creating training data loader for split {split_index}..")
                     dataloader = data_processor.get_data_loader(batch_path, 
                                                                 batch_size=parameters['batch_size'], 
                                                                 local_rank=parameters['local_rank'], 
@@ -238,9 +239,28 @@ class ModelProcessor(object):
                 df.to_csv(os.path.join(output_dir, 'training_stats.csv'), index=False)
             
             else:
-                logging.info(f"Skipping epoch {epoch_i}...")
-                df = pd.read_csv(os.path.join(output_dir, 'training_stats.csv'))
-                training_stats = df.to_dict('records')
+                logging.info(f"[{utils.get_timestamp()}] - Skipping epoch {epoch_i}...")
+                try:
+                    df = pd.read_csv(os.path.join(output_dir, 'training_stats.csv'))
+                    training_stats = df.to_dict('records')
+                except:
+                    if (epoch_i+1) >= parameters['start_epoch']:
+                        logging.info(f"... but computing the validation loss for previous epoch number {epoch_i}...")
+                        avg_val_accuracy, avg_val_loss, validation_time, report = self.evaluate(data_processor, validation_features_paths, 'dev', parameters=parameters)
+                        training_stats.append(
+                            {
+                                'epoch': epoch_i + 1,
+                                'Training Loss': None,
+                                'Valid. Loss': avg_val_loss,
+                                'Valid. Accur.': avg_val_accuracy,
+                                'Training Time': None,
+                                'Validation Time': validation_time,
+                                'report': report,
+                            }
+                        )
+                        df = pd.DataFrame(data=training_stats)
+                        df.to_csv(os.path.join(output_dir, 'training_stats.csv'), index=False)
+
             
         print("\nTraining complete!")
         logging.info("\nTraining complete!")
@@ -267,9 +287,9 @@ class ModelProcessor(object):
         nb_batchs = 0
         # Evaluate data for one epoch
         for split_index, batch_path in enumerate(validation_features_paths):
-            logging.info(f"Creating {set_type} data loader for split {split_index}..")
+            logging.info(f"[{utils.get_timestamp()}] - Creating {set_type} data loader for split {split_index}..")
             dataloader = data_processor.get_data_loader(batch_path, 
-                                                        batch_size=parameters['batch_size'], 
+                                                        batch_size=parameters['batch_size_eval'], 
                                                         local_rank=parameters['local_rank'], 
                                                         set_type=set_type)
             logging.info("\tDone.")
@@ -285,11 +305,12 @@ class ModelProcessor(object):
                 #   [1]: token_type_ids
                 #   [2]: labels 
                 #   [3]: output_mask (optional)
-                input_ids = batch[0].to(self.device)
+                input_ids = batch[0].to(torch.int64).to(self.device)
                 #attention_mask = batch[1].to(self.device)
-                attention_mask = self.attention_mask_from_inputs(batch[0], self.context_size).to(self.device)
-                token_type_ids = batch[1].to(self.device)
-                labels_ids = batch[2].to(self.device)
+                #attention_mask = self.attention_mask_from_inputs(batch[0], self.context_size).to(torch.int64).to(self.device)
+                attention_mask = torch.ones(batch[0].size()).to(torch.int64).to(self.device)
+                token_type_ids = batch[1].to(torch.int64).to(self.device)
+                label_ids = batch[2].to(torch.int64).to(self.device)
                 output_mask = None 
                 if self.use_output_mask:
                     output_mask = batch[3].numpy()
@@ -333,17 +354,17 @@ class ModelProcessor(object):
             del active_loss
             
         # Merging Predicitons and labels
-        logging.info("Loading computed predictions and labels & merging...")
+        logging.info(f"[{utils.get_timestamp()}] - Loading computed predictions and labels & merging...")
         pred_flat = np.hstack([np.load(os.path.join(parameters['output_dir'], 'tmp', f'pred_flat_{split_index}.npy')) for split_index in range(len(validation_features_paths))])
         labels_flat = np.hstack([np.load(os.path.join(parameters['output_dir'], 'tmp', f'labels_flat_{split_index}.npy')) for split_index in range(len(validation_features_paths))])
 
         # Calculate the accuracy for this batch of test sentences, and
         # accumulate it over all batches.
-        logging.info("Computing accuracy...")
+        logging.info(f"[{utils.get_timestamp()}] - Computing accuracy...")
         total_eval_accuracy = Metrics.flat_accuracy(labels_flat, pred_flat)
 
         # Report results
-        logging.info("Computing report...")
+        logging.info(f"[{utils.get_timestamp()}] - Computing report...")
         report = Metrics.report(self.metric_name, labels_flat, pred_flat)
         #print(report)
         # Report the final accuracy for this validation run.

@@ -85,7 +85,8 @@ class LMProcessor(DataProcessor):
     """Processor for language modeling."""
     
     def __init__(self, max_seq_length, device='cpu', output_dir='./', dataset_name='', dataset_dir='./', n_splits=5, context_size=None, extra=''):
-        self.max_seq_length = max_seq_length
+        self.max_seq_length = max_seq_length if context_size is None else context_size+5 # +5 because of the special tokens + the current and following tokens
+        print(f'Using context_size of: {context_size} and max_seq_length of {self.max_seq_length}')
         self.device = device
         self.dataset_name = dataset_name
         self.output_dir = output_dir
@@ -163,18 +164,37 @@ class LMProcessor(DataProcessor):
             return example
         
         def g(i, line):
-            sequence = self.tokenizer.encode(' '.join(line)).ids
+            sequence = self.tokenizer.encode(line).ids
             return f(i, sequence)
         
         # Splitting data for memory issues...
-        indexes = list(range(0, n, step))
-        m = len(indexes)
         n_splits = self.n_splits
-        splits = [indexes[i*m//n_splits: m*(i+1)//n_splits] for i in range(n_splits)]
-        for index_split, split in enumerate(splits):
-            print(f"Computing split {index_split+1} / {n_splits}... Split size: {len(split)}")
-            examples = Parallel(n_jobs=-1)(delayed(g)(index+split[0], lines[i:i + step]) for index, i in tqdm(enumerate(split)))
-            self.save_object(os.path.join(self.dataset_dir, f'{self.dataset_name}{self.extra}{set_type}_examples_split-{index_split}.pkl'), examples)
+        if self.context_size is not None:
+            os.environ["TOKENIZERS_PARALLELISM"] = "true"
+            print('Tokenizing...')
+            for index_split in range(n_splits):
+                start = index_split*len(lines)//n_splits 
+                stop = (index_split+1)*len(lines)//n_splits
+                all_ids = self.tokenizer.encode(' '.join(lines[start:stop])).ids
+                self.save_object(os.path.join(self.dataset_dir, f'{self.dataset_name}{self.extra}{set_type}_all-ids_split-{index_split}.pkl'), all_ids)
+                                
+                #print(f'Computing examples split {index_split+1}...from {start} to {stop}... {len(all_ids)} ids')
+                #examples = Parallel(n_jobs=-1)(delayed(f)(i, all_ids[i:i + self.context_size + 2]) for i, _ in tqdm(enumerate(all_ids[:-self.context_size -2])))
+                ## +1 because we include the current token 
+                ## and +1 because we want to predict the following token that has to be included...
+                #print(f"Saving split {index_split+1} / {n_splits}... Split size: {len(examples)}")
+                #self.save_object(os.path.join(self.dataset_dir, f'{self.dataset_name}{self.extra}{set_type}_examples_split-{index_split}.pkl'), examples)
+            print('Computed.')
+            os.environ["TOKENIZERS_PARALLELISM"] = "false"
+            
+        else:
+            indexes = list(range(0, n, step))
+            m = len(indexes)
+            splits = [indexes[i*m//n_splits: m*(i+1)//n_splits] for i in range(n_splits)]
+            for index_split, split in enumerate(splits):
+                print(f"Computing split {index_split+1} / {n_splits}... Split size: {len(split)}")
+                examples = Parallel(n_jobs=-1)(delayed(g)(index+split[0], ' '.join(lines[i:i + step])) for index, i in tqdm(enumerate(split)))
+                self.save_object(os.path.join(self.dataset_dir, f'{self.dataset_name}{self.extra}{set_type}_examples_split-{index_split}.pkl'), examples)
         # Merging
         #examples = [self.load_object(os.path.join(self.dataset_dir, f'{self.dataset_name}{set_type}_examples_split-{index_split}.pkl')) for index_split in range(n_splits)]
         #examples = [item for l in examples for item in l]
