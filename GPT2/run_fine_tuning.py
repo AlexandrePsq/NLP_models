@@ -170,7 +170,7 @@ if __name__=='__main__':
                                     )
     
     try:
-        if parameters['do_train']:
+        if parameters['do_train'] or parameters['do_validation']:
             training_stats = model_processor.train(processor, train_features_paths, dev_features_paths, parameters['output_dir'], parameters=parameters)
             
             logging.info("Saving fine-tuned model to {}...".format(os.path.join(parameters['output_dir'], 'fine_tuned')))

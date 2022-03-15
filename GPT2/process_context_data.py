@@ -53,14 +53,14 @@ def save_file(filename, data):
         pickle.dump(data, outp, pickle.HIGHEST_PROTOCOL)
         
 def to_features(example):
-    labels_ids = torch.FloatTensor(example.label).unsqueeze(0).to(torch.int32)
+    #labels_ids = torch.FloatTensor(example.label).unsqueeze(0).to(torch.int32)
     input_ids = torch.FloatTensor(example.text_a).unsqueeze(0).to(torch.int32)
-    attention_mask = None #attention_mask_from_inputs(input_ids, self.context_size)
-    token_type_ids = torch.zeros(input_ids.size()).to(torch.int32)
+    #attention_mask = None #attention_mask_from_inputs(input_ids, self.context_size)
+    #token_type_ids = torch.zeros(input_ids.size()).to(torch.int32)
     return InputFeatures(input_ids=input_ids,
-                            attention_mask=attention_mask,
-                            token_type_ids=token_type_ids,
-                            label_ids=labels_ids,
+                            attention_mask=None,
+                            token_type_ids=None,
+                            label_ids=None,
                             output_mask=None)
 
     
@@ -90,19 +90,22 @@ if __name__=='__main__':
         else:
             files = sorted(glob.glob(os.path.join(data_path, f'gpt2_context-{args.context_size}_{args.set_type}_examples_split-{args.split}_*.pkl')))
         print(f'Loading {len(files)} files...')
-        data = [read_file(filename) for filename in tqdm(files)]
-        print(f'{len(data)} files with {len(data[0])} object in them.')
-        print('Flattening...')
-        data = [i for l in data for i in l]
-        print('Saving...')
-        if args.compute_feature:
-            save_file(os.path.join(data_path, f'gpt2_context-{args.context_size}_{args.set_type}_features_split-{args.split}.pkl'), data)
-        else:
-            save_file(os.path.join(data_path, f'gpt2_context-{args.context_size}_{args.set_type}_examples_split-{args.split}.pkl'), data)
-        print('Merged.')
-        print('Cleaning...')
-        for filename in files:
-            os.remove(filename)
+        files_chunck = [files[i*args.divide_into: (i+1)*args.divide_into] for i in range(len(files)//args.divide_into)]
+        for chunck_index, chunck in enumerate(files_chunck):
+            data = [read_file(filename) for filename in tqdm(chunck)]
+            print(f'{len(data)} files with {len(data[0])} object in them.')
+            print('Flattening...')
+            data = [i for l in data for i in l]
+            print('Saving...')
+            split = args.split * len(files)//args.divide_into + chunck_index
+            if args.compute_feature:
+                save_file(os.path.join(data_path, f'gpt2_context-{args.context_size}_{args.set_type}_features_split-{split}.pkl'), data)
+            else:
+                save_file(os.path.join(data_path, f'gpt2_context-{args.context_size}_{args.set_type}_examples_split-{split}.pkl'), data)
+            print('Merged.')
+            print('Cleaning...')
+            for filename in chunck:
+                os.remove(filename)
         
     elif args.compute_feature:
         split = read_file(os.path.join(data_path, f'gpt2_context-{args.context_size}_{args.set_type}_examples_split-{args.split}.pkl'))

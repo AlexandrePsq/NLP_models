@@ -249,10 +249,12 @@ class LMProcessor(DataProcessor):
             def f(example):
                 #labels_ids = torch.FloatTensor(example.label)[1:].unsqueeze(0).to(torch.int32)
                 #input_ids = torch.FloatTensor(example.text_a)[:-1].unsqueeze(0).to(torch.int32)
-                labels_ids = torch.FloatTensor(example.label).unsqueeze(0).to(torch.int32)
+                #labels_ids = torch.FloatTensor(example.label).unsqueeze(0).to(torch.int32)
+                labels_ids = None
                 input_ids = torch.FloatTensor(example.text_a).unsqueeze(0).to(torch.int32)
                 attention_mask = None #attention_mask_from_inputs(input_ids, self.context_size)
-                token_type_ids = torch.zeros(input_ids.size()).to(torch.int32)
+                #token_type_ids = torch.zeros(input_ids.size()).to(torch.int32)
+                token_type_ids = None
                 return InputFeatures(input_ids=input_ids,
                                         attention_mask=attention_mask,
                                         token_type_ids=token_type_ids,
@@ -281,9 +283,9 @@ class LMProcessor(DataProcessor):
         # Creating data loader
         input_ids = torch.cat([f.input_ids for f in features], dim=0)
         #attention_mask = None #torch.cat([f.attention_mask for f in features], dim=0)
-        token_type_ids =  torch.cat([f.token_type_ids for f in features], dim=0)
-        label_ids =  torch.cat([f.label_ids for f in features], dim=0)
-        data = TensorDataset(input_ids, token_type_ids, label_ids) # attention_mask were removed !
+        #token_type_ids =  torch.cat([f.token_type_ids for f in features], dim=0)
+        #label_ids =  torch.cat([f.label_ids for f in features], dim=0)
+        data = TensorDataset(input_ids) # attention_mask, token_type_ids, label_ids were removed !
         if set_type=='train':
             if local_rank == -1:
                 sampler = RandomSampler(data)
