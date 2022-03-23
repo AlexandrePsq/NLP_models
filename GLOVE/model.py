@@ -18,10 +18,10 @@ from utils import embeddings, filter_args, embeddings_past_context, embeddings_f
 class GloveExtractor(object):
     """Container module for Glove embeddings extraction."""
 
-    def __init__(self, pretrained_glove_model=None ,language='english', prediction_type='sequential', **kwargs):
+    def __init__(self, pretrained_glove_model=None, language='english', prediction_type='sequential', **kwargs):
         super().__init__()
         
-        self.model = Glove(pretrained_glove_model, **kwargs)
+        self.model = Glove(pretrained_glove_model, language=language, **kwargs)
         self.tokenizer = tokenize
         
         self.language = language

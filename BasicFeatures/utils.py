@@ -109,19 +109,19 @@ def get_function_words_list(language,
     return function_words_list.split('\n')
 
 
-def create_onsets_files(path_to_onset_folder, nb_runs, n_frames, frame_rate, slice_period):
-    for index in range(1, nb_runs + 1):
-        length = int((n_frames/frame_rate) // slice_period)
-        offsets = np.cumsum(np.ones(length) * slice_period)
-        offsets = np.array([round(x, 3) for x in offsets])
-        onsets = np.hstack([np.zeros(1), offsets[:-1]])
-        duration = np.zeros(length)
-        df = pd.DataFrame({})
-        df['onsets'] = onsets
-        df['offsets'] = offsets
-        df['duration'] = duration
-        saving_path = 'rms_{}_run{}.csv'.format(slice_period, index)
-        df.to_csv(os.path.join(path_to_onset_folder, saving_path), index=False)
+def create_onsets_files(path_to_onset_folder, n_frames, frame_rate, slice_period, run_index):
+    """TODO"""
+    length = int((n_frames/frame_rate) // slice_period)
+    offsets = np.cumsum(np.ones(length) * slice_period)
+    offsets = np.array([round(x, 3) for x in offsets])
+    onsets = np.hstack([np.zeros(1), offsets[:-1]])
+    duration = np.zeros(length)
+    df = pd.DataFrame({})
+    df['onsets'] = onsets
+    df['offsets'] = offsets
+    df['duration'] = duration
+    saving_path = 'rms_{}_run{}.csv'.format(slice_period, run_index)
+    df.to_csv(os.path.join(path_to_onset_folder, saving_path), index=False)
 
 
 #########################################
@@ -204,7 +204,6 @@ def rms(rms_iterator,
     Returns root mean squared of the audio signal.
     """
     iterator, frame_rate, n_frames, slice_length = rms_iterator
-    create_onsets_files(path_to_onset_folder, nb_runs, n_frames, frame_rate, slice_period)
     result = np.apply_along_axis(lambda y: np.sqrt(np.mean(np.square(y, dtype=np.float64))),1, iterator)
     print(len(result))
     return pd.DataFrame(result, columns=['rms'])

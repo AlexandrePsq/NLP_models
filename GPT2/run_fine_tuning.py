@@ -27,7 +27,7 @@ from transformers import GPT2Tokenizer, WEIGHTS_NAME, CONFIG_NAME, GPT2Config
 
 from modeling_hacked_gpt2 import GPT2Model, GPT2LMHeadModel
 from language_modeling import LMDataset, LMProcessor
-from gpt2_utils import read_yaml, set_seed, format_time, filter_args, get_device, save, check_folder, save_yaml
+from gpt2_utils import read_yaml, set_seed, format_time, filter_args, get_device, save, check_folder, save_yaml, load_last_checkpoint
 from processors import DataProcessor, ModelProcessor
 from reporting import Report
 from dataset import Dataset
@@ -110,16 +110,9 @@ if __name__=='__main__':
         
     processor.set_tokenizer(tokenizer)
     if parameters['start_epoch'] > 0:
-        path = sorted(glob.glob(os.path.join(parameters['output_dir'], 'end-epoch-*')))
-        if len(path)==0:
-            path = sorted(glob.glob(os.path.join(parameters['output_dir'], 'start-epoch-*')))
-        path = path[-1]
-        print(f'Using model saved at: {path}...')
-        model = GPT2LMHeadModel.from_pretrained(
-                        path,
-                        output_attentions=parameters['output_attentions'], # Whether the model returns attentions weights.
-                        output_hidden_states=parameters['output_hidden_states'], # Whether the model returns all hidden-states.
-        )
+        model, start_at_dataloader = load_last_checkpoint(parameters)
+    else:
+        start_at_dataloader = 0
     model.to(device)
     # Setting environment for the tokenizer not to interefere with future parallelisation
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -171,7 +164,7 @@ if __name__=='__main__':
     
     try:
         if parameters['do_train'] or parameters['do_validation']:
-            training_stats = model_processor.train(processor, train_features_paths, dev_features_paths, parameters['output_dir'], parameters=parameters)
+            training_stats = model_processor.train(processor, train_features_paths, dev_features_paths, parameters['output_dir'], parameters=parameters, start_at_dataloader=start_at_dataloader)
             
             logging.info("Saving fine-tuned model to {}...".format(os.path.join(parameters['output_dir'], 'fine_tuned')))
             name = f"started_at_{parameters['init_checkpoints']}_fine_tuned" if parameters['init_checkpoints'] > 0 else 'fine_tuned'

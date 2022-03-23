@@ -138,7 +138,7 @@ class ModelProcessor(object):
         self.scheduler.step()
         return total_train_loss
 
-    def train(self, data_processor, train_features_paths, validation_features_paths, output_dir, parameters):
+    def train(self, data_processor, train_features_paths, validation_features_paths, output_dir, parameters, start_at_dataloader=0):
         """ Train a model with evaluation at each step, given an optimizer, scheduler, device and train and 
         validation data loaders.
         Returns loss statistics from training and evaluations.
@@ -176,44 +176,50 @@ class ModelProcessor(object):
                     self.model.train()
 
                     for split_index, batch_path in enumerate(train_features_paths):
-                        logging.info(f"[{utils.get_timestamp()}] - Creating training data loader for split {split_index}..")
-                        dataloader = data_processor.get_data_loader(batch_path, 
-                                                                    batch_size=parameters['batch_size'], 
-                                                                    local_rank=parameters['local_rank'], 
-                                                                    set_type='train')
-                        nb_batchs = len(dataloader) * len(train_features_paths)
-                        logging.info(f"[{utils.get_timestamp()}] - \tDone.")
-                        save_step = max(1, self.nb_epochs * len(dataloader) * len(train_features_paths) // self.nb_checkpoints)
+                        if split_index >= start_at_dataloader:
+                            start_at_dataloader = 0
+                            logging.info(f"[{utils.get_timestamp()}] - Creating training data loader for split {split_index}..")
+                            dataloader = data_processor.get_data_loader(batch_path, 
+                                                                        batch_size=parameters['batch_size'], 
+                                                                        local_rank=parameters['local_rank'], 
+                                                                        set_type='train')
+                            nb_batchs = len(dataloader) * len(train_features_paths)
+                            logging.info(f"[{utils.get_timestamp()}] - \tDone.")
+                            save_step = max(1, self.nb_epochs * len(dataloader) * len(train_features_paths) // self.nb_checkpoints)
 
-                        # For each batch of training data...
-                        for step, batch in enumerate(dataloader):
-                            step += nb_batchs_done
+                            # For each batch of training data...
+                            for step, batch in enumerate(dataloader):
+                                step += nb_batchs_done
 
-                            # Save model weights to have a given number of checkpoints at the end
-                            if step != 0 and step % save_step == 0:
-                                save(self.model, self.tokenizer, output_dir, 'checkpoint_' + str(checkpoints_index))
-                                checkpoints_index += 1
-                            # Progress update every 50 batches.
-                            if step % min(50, save_step) == 0 and not step == 0:
-                                # Calculate elapsed time in minutes.
-                                elapsed = format_time(time.time() - t0)
-                                # Report progress.
-                                lr = vars(self.optimizer)['param_groups'][0]['lr']
-                                print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.2f}e-5 | ms/batch {} | '
-                                'loss {:5.2f} | ppl {:8.2f}'.format(epoch_i, step, nb_batchs, lr*10**5, elapsed, total_train_loss-tmp, math.exp(total_train_loss-tmp))) # / :5.2f
-                                logging.info('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.2f}e-5 | ms/batch {} | '
-                                'loss {:5.2f} | ppl {:8.2f}'.format(epoch_i, step, nb_batchs, lr*10**5, elapsed, total_train_loss-tmp, math.exp(total_train_loss-tmp)))
-                            tmp = total_train_loss if step>0 else 0
-                            total_train_loss = self.training_step(batch, total_train_loss)
-                        nb_batchs_done += len(dataloader)
+                                # Save model weights to have a given number of checkpoints at the end
+                                if step != 0 and step % save_step == 0:
+                                    save(self.model, self.tokenizer, output_dir, 'checkpoint_' + str(checkpoints_index))
+                                    checkpoints_index += 1
+                                # Progress update every 50 batches.
+                                if step % min(50, save_step) == 0 and not step == 0:
+                                    # Calculate elapsed time in minutes.
+                                    elapsed = format_time(time.time() - t0)
+                                    # Report progress.
+                                    lr = vars(self.optimizer)['param_groups'][0]['lr']
+                                    print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.2f}e-5 | ms/batch {} | '
+                                    'loss {:5.2f} | ppl {:8.2f}'.format(epoch_i, step, nb_batchs, lr*10**5, elapsed, total_train_loss-tmp, math.exp(total_train_loss-tmp))) # / :5.2f
+                                    logging.info('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.2f}e-5 | ms/batch {} | '
+                                    'loss {:5.2f} | ppl {:8.2f}'.format(epoch_i, step, nb_batchs, lr*10**5, elapsed, total_train_loss-tmp, math.exp(total_train_loss-tmp)))
+                                tmp = total_train_loss if step>0 else 0
+                                total_train_loss = self.training_step(batch, total_train_loss)
+                            nb_batchs_done += len(dataloader)
+                            # Cleaning
+                            del dataloader
+                            gc.collect()
+                            # Saving
+                            logging.info("Saving model at the end of DataLoader {} to {}...".format(split_index, os.path.join(output_dir, f'end-epoch-{epoch_i}_split-{split_index}')))
+                            save(self.model, self.tokenizer, output_dir, f'end-epoch-{epoch_i}_split-{split_index}')
+                            logging.info("\tDone.")
 
                     # Calculate the average loss over all of the batches.
                     avg_train_loss = total_train_loss / nb_batchs_done           
                     # Measure how long this epoch took.
                     training_time = format_time(time.time() - t0)
-                    # Cleaning
-                    del dataloader
-                    gc.collect()
 
                     print("\n  Average training loss: {0:.2f}".format(avg_train_loss))
                     logging.info("\n  Average training loss: {0:.2f}".format(avg_train_loss))

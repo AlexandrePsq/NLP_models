@@ -73,7 +73,7 @@ def preprocess(text, special_words, language, convert_numbers=False):
         for number in numbers:
             text = text.replace(number, transf.number_to_words(number))
     if language=='french':
-        punctuation = [',', ';', ':', '/', '-', '"', '‘', '’', '(', ')', '{', '}', '[', ']', '`', '“', '”', '—', '«', '»']
+        punctuation = [',', ';', ':', '/', '-', '"', '‘', '’', '(', ')', '{', '}', '[', ']', '`', '“', '”', '—', '«', '»', "'"]
         text = text.replace('\'', '\' ')
     elif language=='english':
         punctuation = ['\'', ',', ';', ':', '/', '-', '"', '‘', '’', '(', ')', '{', '}', '[', ']', '`', '“', '”', '—']
@@ -85,6 +85,8 @@ def preprocess(text, special_words, language, convert_numbers=False):
         text = text.replace(item, ' '+ item + '\n')
     text = text.replace('<3 points>', ' ...\n')
     for item in eos_punctuation + ['...']:
+        text = text.replace(item + '\n' + ' ' + '"', item + ' ' + '"' + '\n')
+        text = text.replace(item + '\n' + ' ' + '»', item + ' ' + '»' + '\n')
         text = text.replace(item + '\n' + ' ' + '”', item + ' ' + '”' + '\n')
         text = text.replace(item + '\n' + ' ' + '’', item + ' ' + '’' + '\n')
     text = re.sub(' +', ' ', text)
@@ -99,7 +101,7 @@ def rms_tokenizer(path_to_audio, slice_period):
     # slice_length = int(slice_period * rate)
     [rate, data] = wave.read(path_to_audio)
     slice_length = int(slice_period * rate)
-    data_list = [np.array(data[index * slice_length: index * slice_length + slice_length], dtype=np.float64) for index in range(len(data)//slice_length)]
+    data_list = [np.array(data[index*slice_length: (index+1)*slice_length], dtype=np.float64) for index in range(len(data)//slice_length)]
     # Read audio data.
     # data = np.frombuffer(wave_file.readframes(n_frames), dtype=np.int16)
     # data_list = [data[index*slice_length: index*slice_length + slice_length] for index in range(n_frames//slice_length)]

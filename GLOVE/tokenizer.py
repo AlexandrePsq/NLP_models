@@ -46,7 +46,7 @@ def tokenize(path, language, train=False, vocab=None):
     return iterator
 
 
-def preprocess(text, special_words, language):
+def preprocess(text, special_words, language, convert_numbers=False):
     """ Prepare text for tokenization into sentences.
     Replace words in text by the ones by which they have been replaced in the 
     textgrid files. Then replace all numbers by their written english version.
@@ -57,15 +57,20 @@ def preprocess(text, special_words, language):
         - special_words: (dict) special words and words by which to replace them
         - language: (str)
     """
-    text = text.replace('\n', '')
+    text = text.replace('\n', ' ')
     text = text.replace('<unk>', 'unk')
     for word in special_words[language].keys():
         text = text.replace(word, special_words[language][word])
-    transf = inflect.engine()
-    numbers = re.findall('\d+', text)
-    for number in numbers:
-        text = text.replace(number, transf.number_to_words(number))
-    punctuation = ['\'', ',', ';', ':', '/', '-', '"', '‘', '’', '(', ')', '{', '}', '[', ']', '`', '“', '”', '—']
+    if convert_numbers:
+        transf = inflect.engine()
+        numbers = re.findall('\d+', text)
+        for number in numbers:
+            text = text.replace(number, transf.number_to_words(number))
+    if language=='french':
+        punctuation = [',', ';', ':', '/', '-', '"', '‘', '’', '(', ')', '{', '}', '[', ']', '`', '“', '”', '—', '«', '»', "'"]
+        text = text.replace('\'', '\' ')
+    elif language=='english':
+        punctuation = ['\'', ',', ';', ':', '/', '-', '"', '‘', '’', '(', ')', '{', '}', '[', ']', '`', '“', '”', '—']
     eos_punctuation =  ['.', '!', '?']
     for item in punctuation:
         text = text.replace(item, ' '+ item + ' ')
@@ -74,20 +79,12 @@ def preprocess(text, special_words, language):
         text = text.replace(item, ' '+ item + '\n')
     text = text.replace('<3 points>', ' ...\n')
     for item in eos_punctuation + ['...']:
+        text = text.replace(item + '\n' + ' ' + '"', item + ' ' + '"' + '\n')
+        text = text.replace(item + '\n' + ' ' + '»', item + ' ' + '»' + '\n')
         text = text.replace(item + '\n' + ' ' + '”', item + ' ' + '”' + '\n')
         text = text.replace(item + '\n' + ' ' + '’', item + ' ' + '’' + '\n')
     text = re.sub(' +', ' ', text)
-    
-    ### tokenize without punctuation ###
-    # for item in punctuation:
-    #     text = text.replace(item, ' ')
-    ### tokenize with punctuation ###
-    # ### tokenize thanks to usual tools for text without strange characters ###
-    # tokenized = sent_tokenize(text, language=language)
-    # tokenized = [word_tokenize(sentence, language=language) + ['<eos>'] for sentence in tokenized]
-    # iterator = [unk_transform(item, vocab).lower() for sublist in tokenized for item in sublist]
     return text
-
 
 def unk_transform(word, vocab=None):
     if word == 'unk':
