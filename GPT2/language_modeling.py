@@ -286,14 +286,14 @@ class LMProcessor(DataProcessor):
         #token_type_ids =  torch.cat([f.token_type_ids for f in features], dim=0)
         #label_ids =  torch.cat([f.label_ids for f in features], dim=0)
         data = TensorDataset(input_ids) # attention_mask, token_type_ids, label_ids were removed !
-        #if set_type=='train':
-        #    if local_rank == -1:
-        #        sampler = RandomSampler(data)
-        #    else:
-        #        sampler = DistributedSampler(data)
-        #else:
-        #    sampler = SequentialSampler(data)
-        #dataloader = DataLoader(data, sampler=sampler, batch_size=batch_size)
-        shuffle = (set_type=='train')
-        dataloader = DataLoader(data, shuffle=shuffle, batch_size=batch_size)
+        if set_type=='train':
+            if local_rank == -1:
+                sampler = RandomSampler(data)
+            else:
+                sampler = DistributedSampler(data)
+        else:
+            sampler = SequentialSampler(data)
+        dataloader = DataLoader(data, sampler=sampler, batch_size=batch_size)
+        #shuffle = (set_type=='train')
+        #dataloader = DataLoader(data, shuffle=shuffle, batch_size=batch_size)
         return dataloader

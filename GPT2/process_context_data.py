@@ -103,9 +103,9 @@ if __name__=='__main__':
             else:
                 save_file(os.path.join(data_path, f'gpt2_context-{args.context_size}_{args.set_type}_examples_split-{split}.pkl'), data)
             print('Merged.')
-            print('Cleaning...')
-            for filename in chunck:
-                os.remove(filename)
+            #print('Cleaning...')
+            #for filename in chunck:
+            #    os.remove(filename)
         
     elif args.compute_feature:
         split = read_file(os.path.join(data_path, f'gpt2_context-{args.context_size}_{args.set_type}_examples_split-{args.split}.pkl'))

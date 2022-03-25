@@ -109,20 +109,19 @@ if __name__=='__main__':
         tokenizer = Tokenizer.from_file(os.path.join(parameters['output_dir'], parameters['dataset_name'] + 'tokenizer', 'tokenizer.json'))
         
     processor.set_tokenizer(tokenizer)
-    if parameters['start_epoch'] > 0:
-        model, start_at_dataloader = load_last_checkpoint(parameters)
-    else:
-        start_at_dataloader = 0
+    
+    model, start_at_dataloader = load_last_checkpoint(parameters, model=model)
     model.to(device)
+    
     # Setting environment for the tokenizer not to interefere with future parallelisation
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     logging.info("\tDone.")
     
     logging.info("Get input examples...")
     ###### TEST
-    #data.process_dataset('test')
-    #test_examples_paths = processor.get_test_examples(data)
-    #test_features_paths = processor.convert_examples_to_features(test_examples_paths, parameters['max_length'], tokenizer, set_type='test')
+    data.process_dataset('test')
+    test_examples_paths = processor.get_test_examples(data)
+    test_features_paths = processor.convert_examples_to_features(test_examples_paths, parameters['max_length'], tokenizer, set_type='test')
     #dev_examples_paths = processor.get_dev_examples(data)
     #dev_features_paths = processor.convert_examples_to_features(dev_examples_paths, parameters['max_length'], tokenizer, set_type='dev')
     #train_examples_paths = processor.get_train_examples(data)

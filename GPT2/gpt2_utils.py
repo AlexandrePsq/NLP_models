@@ -139,7 +139,7 @@ def save(model, tokenizer, output_dir, index):
     model_to_save.config.to_json_file(output_config_file)
     #tokenizer.save_pretrained(output_dir)
     
-def load_last_checkpoint(parameters):
+def load_last_checkpoint(parameters, model=None):
     """Load the last saved model in case it has crashed...
     Args:
         - parameters: dict
@@ -156,15 +156,18 @@ def load_last_checkpoint(parameters):
         path = path[-1]
     else:
         path = path_loader[-1]
-        start_at_dataloader = os.path.basename(path_loader[-1]).split('epoch-')[-1].split('_split')[-1]            
+        start_at_dataloader = os.path.basename(path_loader[-1]).split('epoch-')[-1].split('_split-')[-1]            
 
-    print(f'Using model saved at: {path}...')
-    model = GPT2LMHeadModel.from_pretrained(
-                    path,
-                    output_attentions=parameters['output_attentions'], # Whether the model returns attentions weights.
-                    output_hidden_states=parameters['output_hidden_states'], # Whether the model returns all hidden-states.
-    )
-    return model, start_at_dataloader
+    try:
+        model = GPT2LMHeadModel.from_pretrained(
+                        path,
+                        output_attentions=parameters['output_attentions'], # Whether the model returns attentions weights.
+                        output_hidden_states=parameters['output_hidden_states'], # Whether the model returns all hidden-states.
+        )
+        print(f'Using model saved at: {path}...')
+    except:
+        print(f'Using model creating from scratch.')
+    return model, int(start_at_dataloader)
 
 def pick_random_word(words, vocabulary):
     """ Replace a word with another.

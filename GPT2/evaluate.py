@@ -63,7 +63,7 @@ if __name__=='__main__':
 
     logging.info("Fetching data (training + validation) and parameters...")
     data._fetch_dataset()
-    data.process_dataset('test')
+    data.process_dataset(parameters['todo'])
     logging.info("\tDone.")
             
     tokenizer = ByteLevelBPETokenizer( 
@@ -80,17 +80,16 @@ if __name__=='__main__':
     print(tokenizer.encode("<s> <mask> . <unk> </s> <pad>").ids) # --> [0, 225, 4, 272, 225, 3, 225, 2, 225, 1]
 
     processor.set_tokenizer(tokenizer)
-    paths = sorted(glob.glob(os.path.join(parameters['output_dir'], 'checkpoint_*')))
+    #paths = sorted(glob.glob(os.path.join(parameters['output_dir'], 'checkpoint_*')))
+    paths = [parameters['model_path']] if parameters['model_path'] is not None else sorted(glob.glob(os.path.join(parameters['output_dir'], 'end-epoch*')))
         
     # Setting environment for the tokenizer not to interefere with future parallelisation
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     logging.info("\tDone.")
     
-    nb_splits = 5
-    nb_batches = nb_splits * len(processor.load_object(os.path.join(parameters['dataset_dir'], f"{parameters['dataset_name']}train_features_split-0.pkl")))
-    data.process_dataset('test')
-    test_examples_paths = processor.get_test_examples(data)
-    test_features_paths = processor.convert_examples_to_features(test_examples_paths, parameters['max_length'], tokenizer, set_type='test')
+    nb_splits = parameters['nb_splits']
+    examples_paths = processor.get_test_examples(data) if parameters['todo']=='test' else processor.get_dev_examples(data)
+    features_paths = processor.convert_examples_to_features(examples_paths, parameters['max_length'], tokenizer, set_type=parameters['todo'])
 
     logging.info("\tDone.")
     
@@ -101,7 +100,7 @@ if __name__=='__main__':
                                         parameters['metric_name'], 
                                         None,
                                         parameters['use_output_mask'])
-    testing_stats  = []
+    evaluation_stats  = []
     
     try:
         for path in paths:
@@ -116,18 +115,18 @@ if __name__=='__main__':
                             output_hidden_states=parameters['output_hidden_states'], # Whether the model returns all hidden-states.
             )
             model_processor.model.to(device)
-            test_accuracy, test_loss = None, None
-            test_accuracy, test_loss, test_time, report = model_processor.evaluate(processor, test_features_paths, 'test', parameters) 
-            testing_stats.append({
-                        'Test. Loss': test_loss,
-                        'Test. Accur.': test_accuracy,
-                        'Test Time': test_time,
+            accuracy, loss = None, None
+            accuracy, loss, time, report = model_processor.evaluate(processor, features_paths, parameters['todo'], parameters) 
+            evaluation_stats.append({
+                        'Loss': loss,
+                        'Accur.': accuracy,
+                        'Time': time,
                         'model_path': path,
                         'report': report})
-            df = pd.DataFrame(data=testing_stats)
-            df.to_csv(os.path.join(parameters['output_dir'], 'testing_stats_checkpoints.csv'), index=False)
-        df = pd.DataFrame(data=testing_stats)
-        df.to_csv(os.path.join(parameters['output_dir'], 'testing_stats_checkpoints.csv'), index=False)
+            df = pd.DataFrame(data=evaluation_stats)
+            df.to_csv(os.path.join(parameters['output_dir'], f"{parameters['output_name']}_evaluation.csv"), index=False)
+        df = pd.DataFrame(data=evaluation_stats)
+        df.to_csv(os.path.join(parameters['output_dir'], f"{parameters['output_name']}_evaluation.csv"), index=False)
         logging.info("\tDone.")
 
     except KeyboardInterrupt:

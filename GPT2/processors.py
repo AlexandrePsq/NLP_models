@@ -158,7 +158,7 @@ class ModelProcessor(object):
             logging.info('Training...')
             print('Training...')
             if epoch_i >= parameters['start_epoch']:
-                if epoch_i==0:
+                if epoch_i==0 and start_at_dataloader==0:
                     logging.info("Saving model at the start of epoch {} to {}...".format(epoch_i, os.path.join(output_dir, f'start-epoch-{epoch_i}')))
                     save(self.model, self.tokenizer, output_dir, f'start-epoch-{epoch_i}')
                     logging.info("\tDone.")
@@ -327,7 +327,7 @@ class ModelProcessor(object):
                 #attention_mask = batch[1].to(self.device)
                 #attention_mask = self.attention_mask_from_inputs(batch[0], self.context_size).to(torch.int64).to(self.device)
                 attention_mask = torch.ones(batch[0].size()).to(torch.int64).to(self.device)
-                token_type_ids = torch.zeros(input_ids.size()).to(torch.int32) #batch[1].to(torch.int64).to(self.device)
+                token_type_ids = torch.zeros(input_ids.size()).to(torch.int64).to(self.device) #batch[1].to(torch.int64).to(self.device)
                 label_ids = input_ids.clone() #batch[2].to(torch.int64).to(self.device)
                 output_mask = None 
                 if self.use_output_mask:
