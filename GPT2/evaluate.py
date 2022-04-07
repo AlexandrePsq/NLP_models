@@ -47,7 +47,7 @@ if __name__=='__main__':
     # Fetch parameters
     parameters = read_yaml(args.yaml_file)
     check_folder(parameters['output_dir'])
-    save_yaml(parameters, os.path.join(parameters['output_dir'], 'config_evaluation.yml'))
+    save_yaml(parameters, os.path.join(parameters['output_dir'], 'lpp_config_evaluation.yml'))
     logging.basicConfig(filename=os.path.join(parameters['output_dir'], parameters['log_file']), filemode='w+', level=logging.INFO)
     logging.info("Parameters fetched.")
 
@@ -58,7 +58,7 @@ if __name__=='__main__':
 
     logging.info("Instanciating dataset and data processor...")
     data = LMDataset(task, parameters['dataset_name'].lower(), dataset_dir=parameters['dataset_dir'])
-    processor = LMProcessor(parameters['max_length'], device=device, output_dir=parameters['output_dir'], dataset_name=parameters['dataset_name'], dataset_dir=parameters['dataset_dir'])
+    processor = LMProcessor(parameters['max_length'], device=device, output_dir=parameters['output_dir'], dataset_name=parameters['dataset_name'], dataset_dir=parameters['dataset_dir'], context_size=parameters['context_size'], extra=parameters['extra'], n_splits=nb_splits)
     logging.info("\tDone.")
 
     logging.info("Fetching data (training + validation) and parameters...")
@@ -88,8 +88,14 @@ if __name__=='__main__':
     logging.info("\tDone.")
     
     nb_splits = parameters['nb_splits']
-    examples_paths = processor.get_test_examples(data) if parameters['todo']=='test' else processor.get_dev_examples(data)
-    features_paths = processor.convert_examples_to_features(examples_paths, parameters['max_length'], tokenizer, set_type=parameters['todo'])
+    data_paths = processor.get_data(data, 'test')
+    data = processor.load_object(batch_path)
+    examples = [processor.create_examples(data[i:i + self.context_size + 2]) for i, _ in tqdm(enumerate(data[:-self.context_size -2]))]
+    features = [torch.FloatTensor(example).unsqueeze(0).to(torch.int64) for example in tqdm(examples)]
+    input_ids = torch.cat(features, dim=0)
+    data = TensorDataset(input_ids)
+    sampler = RandomSampler(data)
+    dataloader = DataLoader(data, sampler=sampler, batch_size=parameters['batch_size'])
 
     logging.info("\tDone.")
     
