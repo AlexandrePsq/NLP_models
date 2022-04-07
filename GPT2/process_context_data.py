@@ -54,7 +54,7 @@ def save_file(filename, data):
         
 def to_features(example):
     #labels_ids = torch.FloatTensor(example.label).unsqueeze(0).to(torch.int32)
-    input_ids = torch.FloatTensor(example.text_a).unsqueeze(0).to(torch.int32)
+    input_ids = torch.FloatTensor(example.text_a).unsqueeze(0).to(torch.int64)
     #attention_mask = None #attention_mask_from_inputs(input_ids, self.context_size)
     #token_type_ids = torch.zeros(input_ids.size()).to(torch.int32)
     return InputFeatures(input_ids=input_ids,

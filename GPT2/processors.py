@@ -11,6 +11,8 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+from torch.utils.data import TensorDataset, random_split
+from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, DistributedSampler
 from transformers import GPT2Tokenizer, GPT2Model, GPT2LMHeadModel, WEIGHTS_NAME, CONFIG_NAME, GPT2Config
 
 from dataset import Dataset, InputExample, InputFeatures
@@ -27,25 +29,13 @@ import utils
 class DataProcessor(object):
     """Base class for data converters for sequence classification data sets."""
 
-    def get_train_examples(self, dataset_object):
-        """Gets a collection of `InputExample`s for the train set."""
-        raise NotImplementedError()
-
-    def get_dev_examples(self, dataset_object):
-        """Gets a collection of `InputExample`s for the dev set."""
-        raise NotImplementedError()
-
-    def get_test_examples(self, dataset_object):
-        """Gets a collection of `InputExample`s for the test set."""
+    def get_data(self, dataset_object, set_type):
+        """Retrieve data for the `set_type` set."""
         raise NotImplementedError()
 
     def get_labels(self, dataset_object):
         """Gets the list of labels for this data set."""
         return dataset_object.get_labels()
-    
-    def convert_examples_to_features(self, examples, max_seq_length, tokenizer):
-        """Loads a data file into a list of `InputBatch`s."""
-        raise NotImplementedError()
 
     def get_data_loader(self, features, batch_size, local_rank):
         """Return data loader object."""
@@ -65,6 +55,7 @@ class ModelProcessor(object):
                     nb_epochs=3, 
                     use_output_mask=False, 
                     context_size=None,
+                    nb_steps=None,
                     nb_checkpoints=24):
         self.model = model
         self.optimizer = optimizer
@@ -75,6 +66,7 @@ class ModelProcessor(object):
         self.nb_epochs = nb_epochs
         self.metric_name = metric_name
         self.use_output_mask = use_output_mask
+        self.nb_steps=nb_steps
         self.context_size = context_size
         
     def attention_mask_from_inputs(self, input_ids, context_size):
@@ -138,7 +130,7 @@ class ModelProcessor(object):
         self.scheduler.step()
         return total_train_loss
 
-    def train(self, data_processor, train_features_paths, validation_features_paths, output_dir, parameters, start_at_dataloader=0):
+    def train(self, data_processor, train_data_paths, validation_features_paths, output_dir, parameters, start_at_dataloader=0):
         """ Train a model with evaluation at each step, given an optimizer, scheduler, device and train and 
         validation data loaders.
         Returns loss statistics from training and evaluations.
@@ -175,17 +167,25 @@ class ModelProcessor(object):
                     # vs. test (source: https://stackoverflow.com/questions/51433378/what-does-model-train-do-in-pytorch)
                     self.model.train()
 
-                    for split_index, batch_path in enumerate(train_features_paths):
-                        if split_index >= start_at_dataloader:
+                    for split_index, batch_path in enumerate(train_data_paths):
+                        if (split_index > start_at_dataloader-1) or (start_at_dataloader+1==len(train_data_paths)):
                             start_at_dataloader = 0
                             logging.info(f"[{utils.get_timestamp()}] - Creating training data loader for split {split_index}..")
-                            dataloader = data_processor.get_data_loader(batch_path, 
-                                                                        batch_size=parameters['batch_size'], 
-                                                                        local_rank=parameters['local_rank'], 
-                                                                        set_type='train')
-                            nb_batchs = len(dataloader) * len(train_features_paths)
+                            data = data_processor.load_object(batch_path)
+                            examples = [data_processor.create_examples(data[i:i + self.context_size + 2]) for i, _ in tqdm(enumerate(data[:-self.context_size -2]))]
+                            features = [torch.FloatTensor(example).unsqueeze(0).to(torch.int64) for example in tqdm(examples)]
+                            input_ids = torch.cat(features, dim=0)
+                            data = TensorDataset(input_ids)
+                            sampler = RandomSampler(data)
+                            dataloader = DataLoader(data, sampler=sampler, batch_size=parameters['batch_size'])
+                            # Cleaning
+                            del data
+                            del examples
+                            del features
+                            del input_ids
+                            
                             logging.info(f"[{utils.get_timestamp()}] - \tDone.")
-                            save_step = max(1, self.nb_epochs * len(dataloader) * len(train_features_paths) // self.nb_checkpoints)
+                            save_step = max(1, self.nb_epochs * len(dataloader) * len(train_data_paths) // self.nb_checkpoints)
 
                             # For each batch of training data...
                             for step, batch in enumerate(dataloader):
@@ -202,9 +202,9 @@ class ModelProcessor(object):
                                     # Report progress.
                                     lr = vars(self.optimizer)['param_groups'][0]['lr']
                                     print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.2f}e-5 | ms/batch {} | '
-                                    'loss {:5.2f} | ppl {:8.2f}'.format(epoch_i, step, nb_batchs, lr*10**5, elapsed, total_train_loss-tmp, math.exp(total_train_loss-tmp))) # / :5.2f
+                                    'loss {:5.2f} | ppl {:8.2f}'.format(epoch_i, step, self.nb_steps//parameters['batch_size'], lr*10**5, elapsed, total_train_loss-tmp, math.exp(total_train_loss-tmp))) # / :5.2f
                                     logging.info('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.2f}e-5 | ms/batch {} | '
-                                    'loss {:5.2f} | ppl {:8.2f}'.format(epoch_i, step, nb_batchs, lr*10**5, elapsed, total_train_loss-tmp, math.exp(total_train_loss-tmp)))
+                                    'loss {:5.2f} | ppl {:8.2f}'.format(epoch_i, step, self.nb_steps//parameters['batch_size'], lr*10**5, elapsed, total_train_loss-tmp, math.exp(total_train_loss-tmp)))
                                 tmp = total_train_loss if step>0 else 0
                                 total_train_loss = self.training_step(batch, total_train_loss)
                             nb_batchs_done += len(dataloader)
@@ -215,7 +215,9 @@ class ModelProcessor(object):
                             logging.info("Saving model at the end of DataLoader {} to {}...".format(split_index, os.path.join(output_dir, f'end-epoch-{epoch_i}_split-{split_index}')))
                             save(self.model, self.tokenizer, output_dir, f'end-epoch-{epoch_i}_split-{split_index}')
                             logging.info("\tDone.")
-
+                        else:
+                            print(f"Skipping loader #{split_index}.")
+                            logging.info(f"Skipping loader #{split_index}.")
                     # Calculate the average loss over all of the batches.
                     avg_train_loss = total_train_loss / nb_batchs_done           
                     # Measure how long this epoch took.

@@ -68,14 +68,6 @@ if __name__=='__main__':
         processor = LMProcessor(parameters['max_length'], device=device, output_dir=parameters['output_dir'], dataset_name=parameters['dataset_name'], dataset_dir=parameters['dataset_dir'], context_size=parameters['context_size'], extra=parameters['extra'], n_splits=nb_splits)
     logging.info("\tDone.")
 
-    logging.info("Fetching data (training + validation) and parameters...")
-    data._fetch_dataset()
-    for set_type in ['train', 'dev']:
-        data.process_dataset(set_type)
-    if parameters['do_test']:
-        data.process_dataset('test')
-    logging.info("\tDone.")
-
     logging.info("Fetching pre-trained GPT-2 model: {} and Tokenizer: {} for the task: {}...".format(parameters['pretrained_model'],parameters['pretrained_tokenizer'],parameters['task']))
     if task in ['language-modeling']:
         if parameters['start_from_scratch']:
@@ -117,23 +109,10 @@ if __name__=='__main__':
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     logging.info("\tDone.")
     
-    logging.info("Get input examples...")
-    ###### TEST
-    data.process_dataset('test')
-    test_examples_paths = processor.get_test_examples(data)
-    test_features_paths = processor.convert_examples_to_features(test_examples_paths, parameters['max_length'], tokenizer, set_type='test')
-    #dev_examples_paths = processor.get_dev_examples(data)
-    #dev_features_paths = processor.convert_examples_to_features(dev_examples_paths, parameters['max_length'], tokenizer, set_type='dev')
-    #train_examples_paths = processor.get_train_examples(data)
-    #train_features_paths = processor.convert_examples_to_features(train_examples_paths, parameters['max_length'], tokenizer, set_type='train')
-    ######
-    train_examples_paths = processor.get_train_examples(data)
-    dev_examples_paths = processor.get_dev_examples(data)
-    logging.info("\tDone.")
-
-    logging.info("Get input features...")
-    train_features_paths = processor.convert_examples_to_features(train_examples_paths, parameters['max_length'], tokenizer, set_type='train')
-    dev_features_paths = processor.convert_examples_to_features(dev_examples_paths, parameters['max_length'], tokenizer, set_type='dev')
+    logging.info("Get input data...")
+    train_data_paths = processor.get_data(data, 'train')
+    dev_data_paths = processor.get_data(data, 'dev')
+    test_data_paths = processor.get_data(data, 'test')
     logging.info("\tDone.")
     
     logging.info("Creating optimizer and learning rate scheduler...")
@@ -142,8 +121,8 @@ if __name__=='__main__':
                     lr=float(parameters['learning_rate']),
                     eps=float(parameters['adam_epsilon'])
                 )
-    nb_batches = nb_splits * len(processor.load_object(os.path.join(parameters['dataset_dir'], f"{parameters['dataset_name']}train_features_split-0.pkl")))
-    total_steps = nb_batches * parameters['nb_epochs'] # Total number of training steps is [nb batches] x [nb epochs]. 
+    nb_steps = sum([len(processor.load_object(path))-parameters['context_size']-2 for path in train_data_paths])
+    total_steps = nb_steps * parameters['nb_epochs'] # Total number of training steps is [nb steps] x [nb epochs]. 
     scheduler = get_linear_schedule_with_warmup(
                     optimizer, 
                     num_warmup_steps=parameters['num_warmup_steps'],
@@ -159,11 +138,12 @@ if __name__=='__main__':
                                         parameters['nb_epochs'],
                                         parameters['use_output_mask'],
                                         context_size=parameters['context_size'],
+                                        nb_steps=nb_steps
                                     )
     
     try:
         if parameters['do_train'] or parameters['do_validation']:
-            training_stats = model_processor.train(processor, train_features_paths, dev_features_paths, parameters['output_dir'], parameters=parameters, start_at_dataloader=start_at_dataloader)
+            training_stats = model_processor.train(processor, train_data_paths, dev_data_paths, parameters['output_dir'], parameters=parameters, start_at_dataloader=start_at_dataloader)
             
             logging.info("Saving fine-tuned model to {}...".format(os.path.join(parameters['output_dir'], 'fine_tuned')))
             name = f"started_at_{parameters['init_checkpoints']}_fine_tuned" if parameters['init_checkpoints'] > 0 else 'fine_tuned'
@@ -192,12 +172,8 @@ if __name__=='__main__':
     test_accuracy, test_loss = None, None
     
     if parameters['do_test']:
-        data.process_dataset('test')
-        test_examples_paths = processor.get_test_examples(data)
-        test_features_paths = processor.convert_examples_to_features(test_examples_paths, parameters['max_length'], tokenizer, set_type='test')
-
         logging.info("Evaluation report: ")
-        test_accuracy, test_loss, test_time, report = model_processor.evaluate(processor, test_features_paths, 'test', parameters) 
+        test_accuracy, test_loss, test_time, report = model_processor.evaluate(processor, test_data_paths, 'test', parameters) 
         testing_stats = [{
                     'Test. Loss': test_loss,
                     'Test. Accur.': test_accuracy,

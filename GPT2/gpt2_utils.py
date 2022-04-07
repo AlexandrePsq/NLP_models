@@ -1,4 +1,5 @@
 import os
+import re
 import wget
 import time
 import yaml
@@ -10,6 +11,7 @@ import datetime
 import argparse
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 from collections import defaultdict
 
 from torch.utils.data import TensorDataset, random_split
@@ -119,6 +121,10 @@ def pad_to_max_length(sequence, max_seq_length):
     else:
         return result + [225]
 
+def create_examples(sequence, max_seq_length):
+    """Returns list of InputExample objects."""
+    return pad_to_max_length([0] + sequence + [225, 2], max_seq_length)
+
 def save(model, tokenizer, output_dir, index):
     """ Saving best-practices: if you use defaults names for the model, 
     you can reload it using from_pretrained().
@@ -139,6 +145,23 @@ def save(model, tokenizer, output_dir, index):
     model_to_save.config.to_json_file(output_config_file)
     #tokenizer.save_pretrained(output_dir)
     
+def tryint(s):
+    try:
+        return int(s)
+    except:
+        return s
+
+def alphanum_key(s):
+    """ Turn a string into a list of string and number chunks.
+        "z23a" -> ["z", 23, "a"]
+    """
+    return [ tryint(c) for c in re.split('([0-9]+)', s) ]
+
+def sort_nicely(l):
+    """ Sort the given list in the way that humans expect.
+    """
+    l.sort(key=alphanum_key)
+
 def load_last_checkpoint(parameters, model=None):
     """Load the last saved model in case it has crashed...
     Args:
@@ -148,10 +171,13 @@ def load_last_checkpoint(parameters, model=None):
         - start_at_dataloader: int
     """
     start_at_dataloader = 0
-    path = sorted(glob.glob(os.path.join(parameters['output_dir'], 'end-epoch-*')))
-    path_loader = sorted(glob.glob(os.path.join(parameters['output_dir'], 'end-epoch-*_split*')))
+    path = glob.glob(os.path.join(parameters['output_dir'], 'end-epoch-*'))
+    sort_nicely(path)
+    path_loader = glob.glob(os.path.join(parameters['output_dir'], 'end-epoch-*_split*'))
+    sort_nicely(path_loader)
     if (len(path)==0) and (len(path_loader)==0):
-        path = sorted(glob.glob(os.path.join(parameters['output_dir'], 'start-epoch-*')))
+        path = glob.glob(os.path.join(parameters['output_dir'], 'start-epoch-*'))
+        sort_nicely(path)
     elif os.path.basename(path[-1]).split('epoch-')[-1]==os.path.basename(path_loader[-1]).split('epoch-')[-1].split('_split')[0]:
         path = path[-1]
     else:
@@ -406,40 +432,30 @@ def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence
         sentence_count = stop
     return batch, indexes
 
-def batchify_text_with_memory_size(iterator, tokenizer, memory_size, bos='<|endoftext|>', eos='<|endoftext|>'):
-    """Create batch of identical size of truncated input with given size in number of words.
+def batchify_to_truncated_input(iterator, tokenizer, context_size=None, max_seq_length=512):
+    """Batchify sentence 'iterator' string, to get batches of sentences with a specific number of tokens per input.
+    Function used with 'get_truncated_activations'.
     Arguments:
-        - iterator: sentence iterator
-        - tokenizer: tokenizer instance
-        - memory_size: int
+        - iterator: sentence str
+        - tokenizer: Tokenizer object
+        - context_size: int
+        - max_seq_length: int
     Returns:
-        - final_iterator: list of arrays of int
-        - final_mappings: array of dict
+        - input_ids: input batched
+        - indexes: tuple of int
     """
-    iterator = (' '.join(iterator)).split()
-    iterator_tmp = []
-    iterator_tmp.append([bos] + iterator[:memory_size] + [eos])
-    for index, _ in enumerate(iterator[memory_size:]):
-        iterator_tmp.append([bos] + iterator[1 + index:1 + index+memory_size] + [eos])
-    mapping_tmp = [match_tokenized_to_untokenized(tokenizer.tokenize(' '.join(sent), add_prefix_space=False), ' '.join(sent)) for sent in iterator_tmp]
-    tokenized_inputs = [tokenizer.convert_tokens_to_ids(tokenizer.tokenize(' '.join(sent), add_prefix_space=False)) for sent in iterator_tmp]
-    final_iterator = [np.array(tokenized_inputs[0:1])]
-    final_mappings = [np.array(mapping_tmp[0:1])]
-    size = len(tokenized_inputs[1])
-    start = 1
-    stop = 2
-    while stop < len(tokenized_inputs):
-        if len(tokenized_inputs[stop])!=size:
-            final_iterator.append(np.array(tokenized_inputs[start:stop]))
-            final_mappings.append(np.array(mapping_tmp[start:stop]))
-            start = stop
-            size = len(tokenized_inputs[stop])
-        stop += 1
-    if (stop-start) > 1:
-        final_iterator.append(np.array(tokenized_inputs[start:stop]))
-        final_mappings.append(np.array(mapping_tmp[start:stop]))
-    
-    return final_iterator, final_mappings
+    max_seq_length = max_seq_length if context_size is None else context_size+5 # +5 because of the special tokens + the current and following tokens
+    os.environ["TOKENIZERS_PARALLELISM"] = "true"
+    data = tokenizer.encode(iterator).ids
+
+    examples = [create_examples(data[i:i + context_size + 2], max_seq_length) for i, _ in enumerate(data[:-context_size])]
+    features = [torch.FloatTensor(example).unsqueeze(0).to(torch.int64) for example in examples]
+    input_ids = torch.cat(features, dim=0)
+    indexes = [(1, context_size+2)] + [(context_size+1, context_size+2) for i in range(1, len(input_ids))] # shifted by one because of the initial special token
+    # Cleaning
+    del examples
+    del features
+    return input_ids, indexes
 
 def batchify_sentences(
     iterator,
