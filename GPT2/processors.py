@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+from torch.nn import CrossEntropyLoss
 from torch.utils.data import TensorDataset, random_split
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, DistributedSampler
 from transformers import GPT2Tokenizer, GPT2Model, GPT2LMHeadModel, WEIGHTS_NAME, CONFIG_NAME, GPT2Config
@@ -97,11 +98,11 @@ class ModelProcessor(object):
         """
         # `batch` contains three pytorch tensors:
         #   [0]: input ids 
-        ##   [1]: attention masks  # was removed
+        ##   [1]: attention masks
         #   [1]: token type ids 
         #   [2]: labels 
         input_ids = batch[0].to(torch.int64).to(self.device)
-        #attention_mask = batch[1].to(self.device)
+        #attention_mask = batch[1].to(torch.int64).to(self.device)
         #attention_mask = self.attention_mask_from_inputs(batch[0], self.context_size).to(torch.int64).to(self.device)
         attention_mask = torch.ones(batch[0].size()).to(torch.int64).to(self.device)
         token_type_ids = torch.zeros(input_ids.size()).to(torch.int64).to(self.device) #batch[1].to(torch.int64).to(self.device)
@@ -172,15 +173,22 @@ class ModelProcessor(object):
                             start_at_dataloader = 0
                             logging.info(f"[{utils.get_timestamp()}] - Creating training data loader for split {split_index}..")
                             data = data_processor.load_object(batch_path)
-                            examples = [data_processor.create_examples(data[i:i + self.context_size + 2]) for i, _ in tqdm(enumerate(data[:-self.context_size -2]))]
-                            features = [torch.FloatTensor(example).unsqueeze(0).to(torch.int64) for example in tqdm(examples)]
+                            #print('------- Data augmentation -------')
+                            #examples = [data_processor.create_examples(data[i:i + self.context_size + 2]) for i, _ in tqdm(enumerate(data[:-self.context_size -2]))]
+                            n = len(data)
+                            print('------- No data augmentation -------')
+                            #examples_ids, examples_masks = list(zip(*[data_processor.create_examples(data[i*self.context_size:min((i+1)*self.context_size + 2, n)]) for i in tqdm(range(n//self.context_size))]))
+                            examples_ids = [data_processor.create_examples(data[i*self.context_size:min((i+1)*self.context_size + 2, n)]) for i in tqdm(range(n//self.context_size))]
+                            features = [torch.FloatTensor(example).unsqueeze(0).to(torch.int64) for example in tqdm(examples_ids)]
+                            #masks = [torch.FloatTensor(mask).unsqueeze(0).to(torch.int64) for mask in tqdm(examples_masks)]
                             input_ids = torch.cat(features, dim=0)
-                            data = TensorDataset(input_ids)
+                            #attention_masks = torch.cat(masks, dim=0)
+                            data = TensorDataset(input_ids) #, attention_masks)
                             sampler = RandomSampler(data)
                             dataloader = DataLoader(data, sampler=sampler, batch_size=parameters['batch_size'])
                             # Cleaning
                             del data
-                            del examples
+                            del examples_ids
                             del features
                             del input_ids
                             
@@ -260,26 +268,27 @@ class ModelProcessor(object):
             
             else:
                 logging.info(f"[{utils.get_timestamp()}] - Skipping epoch {epoch_i}...")
-                try:
-                    df = pd.read_csv(os.path.join(output_dir, 'training_stats.csv'))
-                    training_stats = df.to_dict('records')
-                    df = pd.read_csv(os.path.join(output_dir, 'validation_stats.csv'))
-                    validation_stats = df.to_dict('records')
-                except:
-                    if (epoch_i+1) >= parameters['start_epoch']:
-                        logging.info(f"... but computing the validation loss for previous epoch number {epoch_i}...")
-                        avg_val_accuracy, avg_val_loss, validation_time, report = self.evaluate(data_processor, validation_features_paths, 'dev', parameters=parameters)
-                        validation_stats.append(
-                            {
-                                'epoch': epoch_i + 1,
-                                'Valid. Loss': avg_val_loss,
-                                'Valid. Accur.': avg_val_accuracy,
-                                'Validation Time': validation_time,
-                                'report': report,
-                            }
-                        )
-                        df = pd.DataFrame(data=validation_stats)
-                        df.to_csv(os.path.join(output_dir, 'validation_stats.csv'), index=False)
+                if parameters['do_validation']:
+                    try:
+                        df = pd.read_csv(os.path.join(output_dir, 'training_stats.csv'))
+                        training_stats = df.to_dict('records')
+                        df = pd.read_csv(os.path.join(output_dir, 'validation_stats.csv'))
+                        validation_stats = df.to_dict('records')
+                    except:
+                        if (epoch_i+1) >= parameters['start_epoch']:
+                            logging.info(f"... but computing the validation loss for previous epoch number {epoch_i}...")
+                            avg_val_accuracy, avg_val_loss, validation_time, report = self.evaluate(data_processor, validation_features_paths, 'dev', parameters=parameters)
+                            validation_stats.append(
+                                {
+                                    'epoch': epoch_i + 1,
+                                    'Valid. Loss': avg_val_loss,
+                                    'Valid. Accur.': avg_val_accuracy,
+                                    'Validation Time': validation_time,
+                                    'report': report,
+                                }
+                            )
+                            df = pd.DataFrame(data=validation_stats)
+                            df.to_csv(os.path.join(output_dir, 'validation_stats.csv'), index=False)
 
             
         print("\nTraining complete!")
@@ -301,6 +310,7 @@ class ModelProcessor(object):
         total_eval_accuracy = 0
         total_eval_loss = 0
         nb_eval_steps = 0
+        loss_fct = CrossEntropyLoss()
         
         logging.basicConfig(filename=os.path.join(parameters['output_dir'], parameters['log_file']), filemode='w+', level=logging.INFO)
 
@@ -308,10 +318,19 @@ class ModelProcessor(object):
         # Evaluate data for one epoch
         for split_index, batch_path in enumerate(validation_features_paths):
             logging.info(f"[{utils.get_timestamp()}] - Creating {set_type} data loader for split {split_index}..")
-            dataloader = data_processor.get_data_loader(batch_path, 
-                                                        batch_size=parameters['batch_size_eval'], 
-                                                        local_rank=parameters['local_rank'], 
-                                                        set_type=set_type)
+            
+            data = data_processor.load_object(batch_path)
+            n = len(data)
+            #examples_ids, examples_masks = list(zip(*[data_processor.create_examples(data[i*self.context_size:min((i+1)*self.context_size + 2, n)]) for i in tqdm(range(n//self.context_size))]))
+            examples_ids = [data_processor.create_examples(data[i*self.context_size:min((i+1)*self.context_size + 2, n)]) for i in tqdm(range(n//self.context_size))]
+            features = [torch.FloatTensor(example).unsqueeze(0).to(torch.int64) for example in tqdm(examples_ids)]
+            #masks = [torch.FloatTensor(mask).unsqueeze(0).to(torch.int64) for mask in tqdm(examples_masks)]
+            input_ids = torch.cat(features, dim=0)
+            #attention_masks = torch.cat(masks, dim=0)
+            data = TensorDataset(input_ids)#, attention_masks)
+            sampler = RandomSampler(data)
+            dataloader = DataLoader(data, sampler=sampler, batch_size=parameters['batch_size'])
+
             logging.info("\tDone.")
             nb_batchs += len(dataloader)
             split_logits = []
@@ -326,12 +345,12 @@ class ModelProcessor(object):
                 #   [2]: labels 
                 #   [3]: output_mask (optional)
                 input_ids = batch[0].to(torch.int64).to(self.device)
-                #attention_mask = batch[1].to(self.device)
+                #attention_mask = batch[1].to(torch.int64).to(self.device)
                 #attention_mask = self.attention_mask_from_inputs(batch[0], self.context_size).to(torch.int64).to(self.device)
                 attention_mask = torch.ones(batch[0].size()).to(torch.int64).to(self.device)
                 token_type_ids = torch.zeros(input_ids.size()).to(torch.int64).to(self.device) #batch[1].to(torch.int64).to(self.device)
                 label_ids = input_ids.clone() #batch[2].to(torch.int64).to(self.device)
-                output_mask = None 
+                #active_loss = (attention_mask == 1)
                 if self.use_output_mask:
                     output_mask = batch[3].numpy()
                     active_loss = (output_mask == 1)
@@ -350,9 +369,15 @@ class ModelProcessor(object):
                 loss = outputs[0] 
                 logits = outputs[1]
                 # Accumulate the validation loss.
-                total_eval_loss += loss.item()
+                
+                ## Shift so that tokens < n predict n
+                #shift_logits = logits[active_loss][..., :-1, :].contiguous()
+                #shift_labels = label_ids[active_loss][..., 1:].contiguous()
+                ## Flatten the tokens
+                #loss_fct = CrossEntropyLoss()
+                #loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
-                # Move logits and labels to CPU
+                ## Move logits and labels to CPU
                 split_logits.append(np.argmax(logits.detach().cpu().numpy(), axis=-1))
                 split_label_ids.append(label_ids.to('cpu').numpy())
                 

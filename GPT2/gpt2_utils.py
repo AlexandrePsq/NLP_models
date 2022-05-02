@@ -192,7 +192,7 @@ def load_last_checkpoint(parameters, model=None):
         )
         print(f'Using model saved at: {path}...')
     except:
-        print(f'Using model creating from scratch.')
+        print(f'Using model created from scratch.')
     return model, int(start_at_dataloader)
 
 def pick_random_word(words, vocabulary):
@@ -448,7 +448,11 @@ def batchify_to_truncated_input(iterator, tokenizer, context_size=None, max_seq_
     os.environ["TOKENIZERS_PARALLELISM"] = "true"
     data = tokenizer.encode(iterator).ids
 
-    examples = [create_examples(data[i:i + context_size + 2], max_seq_length) for i, _ in enumerate(data[:-context_size])]
+    if context_size==0:
+        examples = [create_examples(data[i:i + 2], max_seq_length) for i, _ in enumerate(data)]
+    else:
+        examples = [create_examples(data[i:i + context_size + 2], max_seq_length) for i, _ in enumerate(data[:-context_size])]
+    # the last example in examples has one element less from the input data, but it is compensated by the padding. we consider that the element following the last input token is the special token.
     features = [torch.FloatTensor(example).unsqueeze(0).to(torch.int64) for example in examples]
     input_ids = torch.cat(features, dim=0)
     indexes = [(1, context_size+2)] + [(context_size+1, context_size+2) for i in range(1, len(input_ids))] # shifted by one because of the initial special token

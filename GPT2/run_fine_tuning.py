@@ -98,7 +98,8 @@ if __name__=='__main__':
         print(tokenizer.encode("<s> The dog ran <mask> outside . <unk> </s> <pad>").tokens) # --> ['<s>', 'Ġ', '<mask>', 'Ġ.', 'Ġ', '<unk>', 'Ġ', '</s>', 'Ġ', '<pad>']
         print(tokenizer.encode("<s> <mask> . <unk> </s> <pad>").ids) # --> [0, 225, 4, 272, 225, 3, 225, 2, 225, 1]
     else:
-        tokenizer = Tokenizer.from_file(os.path.join(parameters['output_dir'], parameters['dataset_name'] + 'tokenizer', 'tokenizer.json'))
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        #tokenizer = Tokenizer.from_file(os.path.join(parameters['output_dir'], parameters['dataset_name'] + 'tokenizer', 'tokenizer.json'))
         
     processor.set_tokenizer(tokenizer)
     
@@ -121,7 +122,7 @@ if __name__=='__main__':
                     lr=float(parameters['learning_rate']),
                     eps=float(parameters['adam_epsilon'])
                 )
-    nb_steps = sum([len(processor.load_object(path))-parameters['context_size']-2 for path in train_data_paths])
+    nb_steps = sum([len(processor.load_object(path))//parameters['context_size'] for path in train_data_paths])
     total_steps = nb_steps * parameters['nb_epochs'] # Total number of training steps is [nb steps] x [nb epochs]. 
     scheduler = get_linear_schedule_with_warmup(
                     optimizer, 

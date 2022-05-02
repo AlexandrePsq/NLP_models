@@ -130,7 +130,7 @@ if __name__=='__main__':
         #tokenizer.save_model(os.path.join(parameters['output_dir'], parameters['dataset_name'] + 'tokenizer'))
         #tokenizer.save(os.path.join(parameters['output_dir'], parameters['dataset_name'] + 'tokenizer', 'tokenizer.json'))
         #tokenizer.save_pretrained(os.path.join(parameters['output_dir'], parameters['dataset_name'] + 'tokenizer'))
-        print(tokenizer.encode("[CLS] [MASK] . [UNK] [SEP] [PAD]").ids) # --> [2, 4, 12, 1, 3, 0]
+        print(tokenizer.encode("[CLS] [MASK] . [UNK] [SEP] [PAD]").ids) # --> [2, 4, 18, 1, 3, 0]
     else:
         tokenizer = Tokenizer.from_file(os.path.join(parameters['output_dir'], parameters['dataset_name'] + 'tokenizer', 'tokenizer.json'))
 

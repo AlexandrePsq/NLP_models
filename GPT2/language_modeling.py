@@ -123,7 +123,10 @@ class LMProcessor(DataProcessor):
     
     def create_examples(self, sequence):
         """Returns list of InputExample objects."""
-        return self.pad_to_max_length([0] + sequence + [225, 2])
+        #input_id = self.pad_to_max_length([0] + sequence + [225, 2])
+        input_id = self.pad_to_max_length([50256] + sequence + [220, 50256])
+        #attention_mask = self.pad_attention_to_max_length([1] + sequence + [1, 1])
+        return input_id #, attention_mask
 
     def text_to_ids(self, lines, set_type):
         """Convert text file into list of ids associated to the tokenized objects."""
@@ -175,13 +178,29 @@ class LMProcessor(DataProcessor):
             
     def pad_to_max_length(self, sequence):
         """Pad sequence to reach max_seq_length"""
+        n = len(sequence)
+        if n==self.max_seq_length:
+            return sequence
+        else:
+            print(f'Careful - {sequence} - is not of {len(sequence)} (!= max length)... Padding...')
+            sequence = sequence[:self.max_seq_length]
+            #result = sequence + [225, 1] * ((self.max_seq_length - n)// 2)
+            result = sequence + [220, 50256] * ((self.max_seq_length - n)// 2)
+            if len(result)==self.max_seq_length:
+                return result
+            else:
+                #return result + [225]
+                return result + [220]
+        
+    def pad_attention_to_max_length(self, sequence):
+        """Pad sequence to reach max_seq_length"""
         sequence = sequence[:self.max_seq_length]
         n = len(sequence)
-        result = sequence + [225, 1] * ((self.max_seq_length - n)// 2)
+        result = [1 for _ in sequence] + [0, 0] * ((self.max_seq_length - n)// 2)
         if len(result)==self.max_seq_length:
             return result
         else:
-            return result + [225]
+            return result + [0]
     
     def batchify(self, iterator):
         """Batchify list of sentences."""
