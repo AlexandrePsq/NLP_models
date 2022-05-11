@@ -111,19 +111,20 @@ def batchify(tokens, max_length):
         result.append(tokens[i: i+max_length])
     return result
 
-def pad_to_max_length(sequence, max_seq_length):
+def pad_to_max_length(sequence, max_seq_length, space=220, special_token_end=50256):
     """Pad sequence to reach max_seq_length"""
     sequence = sequence[:max_seq_length]
     n = len(sequence)
-    result = sequence + [225, 1] * ((max_seq_length - n)// 2)
+    result = sequence + [space, special_token_end] * ((max_seq_length - n)// 2)
     if len(result)==max_seq_length:
         return result
     else:
-        return result + [225]
+        return result + [space]
 
-def create_examples(sequence, max_seq_length):
+def create_examples(sequence, max_seq_length, space=220, special_token_beg=50256, special_token_end=50256):
     """Returns list of InputExample objects."""
-    return pad_to_max_length([0] + sequence + [225, 2], max_seq_length)
+    return pad_to_max_length([special_token_beg] + sequence + [space, special_token_end], max_seq_length)
+
 
 def save(model, tokenizer, output_dir, index):
     """ Saving best-practices: if you use defaults names for the model, 
@@ -432,7 +433,7 @@ def batchify_with_detailed_indexes(iterator, number_of_sentence, number_sentence
         sentence_count = stop
     return batch, indexes
 
-def batchify_to_truncated_input(iterator, tokenizer, context_size=None, max_seq_length=512):
+def batchify_to_truncated_input(iterator, tokenizer, context_size=None, max_seq_length=512, space='Ġ', special_token_beg='<|endoftext|>', special_token_end='<|endoftext|>'):
     """Batchify sentence 'iterator' string, to get batches of sentences with a specific number of tokens per input.
     Function used with 'get_truncated_activations'.
     Arguments:
@@ -446,12 +447,19 @@ def batchify_to_truncated_input(iterator, tokenizer, context_size=None, max_seq_
     """
     max_seq_length = max_seq_length if context_size is None else context_size+5 # +5 because of the special tokens + the current and following tokens
     os.environ["TOKENIZERS_PARALLELISM"] = "true"
-    data = tokenizer.encode(iterator).ids
+    try:
+        data = tokenizer.encode(iterator).ids
+        text =  tokenizer.encode(iterator).tokens
+    except:
+        data = tokenizer.encode(iterator)
+        text =  tokenizer.tokenize(iterator)
 
     if context_size==0:
         examples = [create_examples(data[i:i + 2], max_seq_length) for i, _ in enumerate(data)]
+        tokens = [create_examples(text[i:i + 2], max_seq_length, space=space, special_token_beg=special_token_beg, special_token_end=special_token_end) for i, _ in enumerate(text)]
     else:
         examples = [create_examples(data[i:i + context_size + 2], max_seq_length) for i, _ in enumerate(data[:-context_size])]
+        tokens = [create_examples(text[i:i + context_size + 2], max_seq_length, space=space, special_token_beg=special_token_beg, special_token_end=special_token_end) for i, _ in enumerate(text[:-context_size])]
     # the last example in examples has one element less from the input data, but it is compensated by the padding. we consider that the element following the last input token is the special token.
     features = [torch.FloatTensor(example).unsqueeze(0).to(torch.int64) for example in examples]
     input_ids = torch.cat(features, dim=0)
@@ -459,7 +467,7 @@ def batchify_to_truncated_input(iterator, tokenizer, context_size=None, max_seq_
     # Cleaning
     del examples
     del features
-    return input_ids, indexes
+    return input_ids, indexes, tokens
 
 def batchify_sentences(
     iterator,
@@ -530,6 +538,33 @@ def batchify_sentences(
         sentence_count = stop
         
     return batch, indexes
+
+
+def batchify_pos_input(data, context_size=None, max_seq_length=512):
+    """Batchify sentence 'iterator' string, to get batches of sentences with a specific number of tokens per input.
+    Function used with 'get_truncated_activations'.
+    Arguments:
+        - data: pos str
+        - context_size: int
+        - max_seq_length: int
+    Returns:
+        - input_ids: input batched
+        - indexes: tuple of int
+    """
+    max_seq_length = max_seq_length if context_size is None else context_size+5 # +5 because of the special tokens + the current and following tokens
+    
+    if context_size==0:
+        examples = [create_examples(data[i:i + 2], max_seq_length, special_token_beg=0, special_token_end=2, space=225) for i, _ in enumerate(data)]
+    else:
+        examples = [create_examples(data[i:i + context_size + 2], max_seq_length, special_token_beg=0, special_token_end=2, space=225) for i, _ in enumerate(data[:-context_size])]
+    # the last example in examples has one element less from the input data, but it is compensated by the padding. we consider that the element following the last input token is the special token.
+    features = [torch.FloatTensor(example).unsqueeze(0).to(torch.int64) for example in examples]
+    input_ids = torch.cat(features, dim=0)
+    indexes = [(1, context_size+2)] + [(context_size+1, context_size+2) for i in range(1, len(input_ids))] # shifted by one because of the initial special token
+    # Cleaning
+    del examples
+    del features
+    return input_ids, indexes
 
 #########################################
 ###### Activations related functions ####

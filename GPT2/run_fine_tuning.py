@@ -122,7 +122,10 @@ if __name__=='__main__':
                     lr=float(parameters['learning_rate']),
                     eps=float(parameters['adam_epsilon'])
                 )
-    nb_steps = sum([len(processor.load_object(path))//parameters['context_size'] for path in train_data_paths])
+    if parameters['context_size']==0:
+        nb_steps = sum([len(processor.load_object(path))//2 for path in train_data_paths])
+    else:
+        nb_steps = sum([len(processor.load_object(path))//parameters['context_size'] for path in train_data_paths])
     total_steps = nb_steps * parameters['nb_epochs'] # Total number of training steps is [nb steps] x [nb epochs]. 
     scheduler = get_linear_schedule_with_warmup(
                     optimizer, 

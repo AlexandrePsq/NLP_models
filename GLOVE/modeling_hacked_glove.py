@@ -51,7 +51,10 @@ class Glove(object):
             if key not in self.model.keys():
                 self.model[key] = np.zeros((self.param['embedding_size'],))
                 for word in self.words2add[key][0]:
-                    self.model[key] += self.model[word]
+                    try:
+                        self.model[key] += self.model[word]
+                    except:
+                        print(f'{word} does not appear in the vocabulary... Be sure that it is normal.')
                 self.model[key] = self.model[key] / len(self.words2add[key][0])
 
     def __name__(self):

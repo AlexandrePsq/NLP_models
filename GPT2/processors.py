@@ -178,7 +178,10 @@ class ModelProcessor(object):
                             n = len(data)
                             print('------- No data augmentation -------')
                             #examples_ids, examples_masks = list(zip(*[data_processor.create_examples(data[i*self.context_size:min((i+1)*self.context_size + 2, n)]) for i in tqdm(range(n//self.context_size))]))
-                            examples_ids = [data_processor.create_examples(data[i*self.context_size:min((i+1)*self.context_size + 2, n)]) for i in tqdm(range(n//self.context_size))]
+                            if self.context_size==0:
+                                examples_ids = [data_processor.create_examples(data[2*i:2*(i+1)]) for i in tqdm(range(n//2))]
+                            else:
+                                examples_ids = [data_processor.create_examples(data[i*self.context_size:min((i+1)*self.context_size + 2, n)]) for i in tqdm(range(n//self.context_size))]
                             features = [torch.FloatTensor(example).unsqueeze(0).to(torch.int64) for example in tqdm(examples_ids)]
                             #masks = [torch.FloatTensor(mask).unsqueeze(0).to(torch.int64) for mask in tqdm(examples_masks)]
                             input_ids = torch.cat(features, dim=0)
@@ -322,7 +325,10 @@ class ModelProcessor(object):
             data = data_processor.load_object(batch_path)
             n = len(data)
             #examples_ids, examples_masks = list(zip(*[data_processor.create_examples(data[i*self.context_size:min((i+1)*self.context_size + 2, n)]) for i in tqdm(range(n//self.context_size))]))
-            examples_ids = [data_processor.create_examples(data[i*self.context_size:min((i+1)*self.context_size + 2, n)]) for i in tqdm(range(n//self.context_size))]
+            if self.context_size==0:
+                examples_ids = [data_processor.create_examples(data[2*i:2*(i+1)]) for i in tqdm(range(n//2))]
+            else:
+                examples_ids = [data_processor.create_examples(data[i*self.context_size:min((i+1)*self.context_size + 2, n)]) for i in tqdm(range(n//self.context_size))]
             features = [torch.FloatTensor(example).unsqueeze(0).to(torch.int64) for example in tqdm(examples_ids)]
             #masks = [torch.FloatTensor(mask).unsqueeze(0).to(torch.int64) for mask in tqdm(examples_masks)]
             input_ids = torch.cat(features, dim=0)

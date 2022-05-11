@@ -10,10 +10,13 @@ import json
 import torch
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
+from spacy.symbols import ORTH
 from transformers import GPT2Tokenizer, GPT2Config
 
 import gpt2_utils
 from modeling_hacked_gpt2 import GPT2Model, GPT2LMHeadModel
+syntax = __import__('04_syntax_generator')
 
 
 class GPT2Extractor(object):
@@ -130,6 +133,9 @@ class GPT2Extractor(object):
         elif 'shuffle' in self.prediction_type:
             activations = self.get_special_activations(iterator, language, transformation='shuffle')
 
+        elif 'pos' in self.prediction_type:
+            activations = self.get_pos_activations(iterator, language)
+
         hidden_states_activations = activations[0] 
         attention_heads_activations = activations[1] 
 
@@ -137,7 +143,7 @@ class GPT2Extractor(object):
                 attention_heads_activations]
     
     
-    def get_truncated_activations(self, iterator, language):
+    def get_truncated_activations(self, iterator, language, bsz=32, space='Ġ', special_token_beg='<|endoftext|>', special_token_end='<|endoftext|>'):
         """Extract hidden state activations of the model for each token from the input, based on truncated input.
         Arguments: 
             - iterator: iterator object
@@ -151,14 +157,27 @@ class GPT2Extractor(object):
         iterator = [item.strip() for item in iterator]
         iterator = ' '.join(iterator)
         
-        tokenized_text = self.tokenizer.encode(iterator).tokens
-        mapping = gpt2_utils.match_tokenized_to_untokenized(tokenized_text, iterator)
+        try:
+            tokenized_text = self.tokenizer.tokenize(iterator, add_prefix_space=False)
+            mapping = gpt2_utils.match_tokenized_to_untokenized(tokenized_text, iterator)
+        except:
+            print('Failed to used default tokenizer...')
+            tokenized_text = self.tokenizer.encode(iterator).tokens
+            mapping = gpt2_utils.match_tokenized_to_untokenized(tokenized_text, iterator, eos_token='</s>')
+                
+        print(f"Using context length of {self.config['context_length']}.")
         
-        input_ids, indexes = gpt2_utils.batchify_to_truncated_input(iterator, self.tokenizer, context_size=self.config['context_length'], max_seq_length=self.config['max_length'])
+        input_ids, indexes, tokens = gpt2_utils.batchify_to_truncated_input(iterator, self.tokenizer, context_size=self.config['context_length'], max_seq_length=self.config['max_length'], space=space, special_token_beg=special_token_beg, special_token_end=special_token_end)
     
         with torch.no_grad():
-            encoded_layers = self.model(input_ids)
-            hidden_states_activations_ = np.stack([i.detach().numpy() for i in encoded_layers[2]], axis=0) #shape: (#nb_layers, batch_size, max_seq_length, hidden_state_dimension)
+            hidden_states_activations_ = []
+            for input_tmp in tqdm(input_ids.chunk(input_ids.size(0)//bsz)):
+                hidden_states_activations_tmp = []
+                encoded_layers = self.model(input_tmp, output_hidden_states=True)
+                hidden_states_activations_tmp = np.stack([i.detach().numpy() for i in encoded_layers.hidden_states], axis=0) #shape: (#nb_layers, batch_size_tmp, max_seq_length, hidden_state_dimension)
+                hidden_states_activations_.append(hidden_states_activations_tmp)
+                
+            hidden_states_activations_ = np.swapaxes(np.vstack([np.swapaxes(item, 0, 1) for item in hidden_states_activations_]), 0, 1) #shape: (#nb_layers, batch_size, max_seq_length, hidden_state_dimension)
             
         activations = []
         for i in range(hidden_states_activations_.shape[1]):
@@ -178,8 +197,69 @@ class GPT2Extractor(object):
         
         return [hidden_states_activations, 
                 attention_heads_activations]
+    
+    def get_pos_activations(self, iterator, language, bsz=16, space='Ġ', special_token_beg=0, special_token_end=2):
+        """Extract hidden state activations of the model for each token from the input, based on truncated input.
+        Arguments: 
+            - iterator: iterator object
+            - language: str
+        Returns:
+            - result: pd.DataFrame containing activation (+ optionally entropy
+            and surprisal)
+        """
+        hidden_states_activations = []
+        attention_heads_activations = []
+        nlp = syntax.set_nlp_pipeline(name="en_core_web_lg", to_remove=['ner'], max_length=np.inf)
+        tokenizer_dict = {
+            '<s>': 0, '<pad>': 1, '</s>': 2, '<unk>': 3, '<mask>': 4, 'PUNCT': 5, 'ADV': 6, 
+            'AUX': 7, 'SYM': 8, 'ADP': 9, 'SCONJ': 10, 'VERB': 11, 'X': 12, 'PART': 13, 
+            'DET': 14, 'NUM': 15, 'NOUN': 16, 'PRON': 17, 'ADJ': 18, 'CCONJ': 19, 'PROPN': 20, 
+            'INTJ': 21, 'SPACE': 22
+        }
+        special_case = [{ORTH: "hasnt"}]
+        nlp.tokenizer.add_special_case("hasnt", special_case)
+        iterator = [item.strip() for item in iterator]
+        iterator = ' '.join(iterator)
+        doc = nlp(iterator)
+        iterator = []
+        tokenized_text = []
+        for token in tqdm(doc):
+            tokenized_text.append(token.pos_)
+            iterator.append(tokenizer_dict[token.pos_])
+        mapping = {i:[i] for i, j in enumerate(iterator)}
+        
+        print(f"Using context length of {self.config['context_length']}.")
+        
+        input_ids, indexes = gpt2_utils.batchify_pos_input(iterator, context_size=self.config['context_length'], max_seq_length=self.config['max_length'])
+    
+        with torch.no_grad():
+            hidden_states_activations_ = []
+            for input_tmp in tqdm(input_ids.chunk(input_ids.size(0)//bsz)):
+                hidden_states_activations_tmp = []
+                encoded_layers = self.model(input_tmp, output_hidden_states=True)
+                hidden_states_activations_tmp = np.stack([i.detach().numpy() for i in encoded_layers.hidden_states], axis=0) #shape: (#nb_layers, batch_size_tmp, max_seq_length, hidden_state_dimension)
+                hidden_states_activations_.append(hidden_states_activations_tmp)
+                
+            hidden_states_activations_ = np.swapaxes(np.vstack([np.swapaxes(item, 0, 1) for item in hidden_states_activations_]), 0, 1) #shape: (#nb_layers, batch_size, max_seq_length, hidden_state_dimension)
+            
+        activations = []
+        for i in range(hidden_states_activations_.shape[1]):
+            index = indexes[i]
+            activations.append([hidden_states_activations_[:, i, j, :] for j in range(index[0], index[1])])
+        activations = np.stack([i for l in activations for i in l], axis=0)
+        activations = np.swapaxes(activations, 0, 1) #shape: (#nb_layers, batch_size, hidden_state_dimension)
 
-
+        for word_index in range(len(mapping.keys())):
+            word_activation = []
+            word_activation.append([activations[:, index, :] for index in mapping[word_index]])
+            word_activation = np.vstack(word_activation)
+            hidden_states_activations.append(np.mean(word_activation, axis=0).reshape(-1))# list of elements of shape: (#nb_layers, hidden_state_dimension).reshape(-1)
+        #After vstacking it will be of shape: (batch_size, #nb_layers*hidden_state_dimension)
+            
+        hidden_states_activations = pd.DataFrame(np.vstack(hidden_states_activations), columns=['hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
+        
+        return [hidden_states_activations, 
+                attention_heads_activations]
 
     def get_classic_activations(self, iterator, language):
         """ Extract hidden state activations of the model for each token from the input, on a 

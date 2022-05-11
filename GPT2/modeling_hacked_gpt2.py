@@ -127,6 +127,7 @@ class GPT2Attention(nn.Module):
         super().__init__()
 
         max_positions = config.max_position_embeddings
+        
         self.register_buffer(
             "bias",
             torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)).view(
@@ -139,6 +140,12 @@ class GPT2Attention(nn.Module):
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
         self.split_size = self.embed_dim
+        
+        ##### HERE ####
+        #self.max_position_embeddings = config.max_position_embeddings
+        #self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.head_dim)
+        ##### HERE ####
+        
         if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
                 f"`embed_dim` must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
@@ -176,6 +183,17 @@ class GPT2Attention(nn.Module):
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
+        
+        ##### HERE ####
+        #seq_length = query.size()[2]
+        #position_ids_l = torch.arange(seq_length, dtype=torch.long, device=key.device).view(-1, 1)
+        #position_ids_r = torch.arange(seq_length, dtype=torch.long, device=key.device).view(1, -1)
+        #distance = position_ids_l - position_ids_r
+        #positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
+        #positional_embedding = positional_embedding.to(dtype=key.dtype)  # fp16 compatibility
+        #relative_position_scores = torch.einsum("bhld,lrd->bhlr", key, positional_embedding)
+        #attn_weights = attn_weights + relative_position_scores
+        ##### HERE ####
 
         if self.scale_attn_weights:
             attn_weights = attn_weights / (float(value.size(-1)) ** 0.5)
@@ -191,7 +209,7 @@ class GPT2Attention(nn.Module):
         #    # Apply the attention mask
         #    attn_weights = attn_weights + attention_mask
         #####
-
+        
         attn_weights = nn.Softmax(dim=-1)(attn_weights)
         ##### control context: apply masking after softmax
         if attention_mask is not None:
@@ -582,6 +600,7 @@ class GPT2Model(GPT2PreTrainedModel):
         self.embed_dim = config.hidden_size
 
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
+        #### HERE REMOVE COMMENT ####
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
 
         self.drop = nn.Dropout(config.embd_pdrop)
@@ -589,6 +608,11 @@ class GPT2Model(GPT2PreTrainedModel):
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         self.init_weights()
+        
+        #### HERE REMOVE COMMENT ####
+        #print('CAREFUL: POSITION EMBEDDINGS WERE REMOVED !!!! ADD THEM BACK !!')
+        #print("/!\/!\/!\ CAREFUL USING RELATIVE POSITION EMBEDDING IN ATTENTION SCORES /!\/!\/!\ ")
+        #### HERE REMOVE COMMENT ####
 
         # Model parallel
         self.model_parallel = False
@@ -742,8 +766,8 @@ class GPT2Model(GPT2PreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
-        position_embeds = self.wpe(position_ids)
-        hidden_states = inputs_embeds + position_embeds
+        position_embeds = self.wpe(position_ids)            #### HERE REMOVE COMMENT ####
+        hidden_states = inputs_embeds + position_embeds     #### HERE REMOVE COMMENT ####
 
         if token_type_ids is not None:
             token_type_embeds = self.wte(token_type_ids)
