@@ -47,6 +47,7 @@ if __name__=='__main__':
     # Fetch parameters
     parameters = read_yaml(args.yaml_file)
     check_folder(parameters['output_dir'])
+    nb_splits = parameters['nb_splits']
     save_yaml(parameters, os.path.join(parameters['output_dir'], 'lpp_config_evaluation.yml'))
     logging.basicConfig(filename=os.path.join(parameters['output_dir'], parameters['log_file']), filemode='w+', level=logging.INFO)
     logging.info("Parameters fetched.")
@@ -61,41 +62,15 @@ if __name__=='__main__':
     processor = LMProcessor(parameters['max_length'], device=device, output_dir=parameters['output_dir'], dataset_name=parameters['dataset_name'], dataset_dir=parameters['dataset_dir'], context_size=parameters['context_size'], extra=parameters['extra'], n_splits=nb_splits)
     logging.info("\tDone.")
 
-    logging.info("Fetching data (training + validation) and parameters...")
-    data._fetch_dataset()
-    data.process_dataset(parameters['todo'])
-    logging.info("\tDone.")
-            
-    tokenizer = ByteLevelBPETokenizer( 
-                    lowercase=parameters['lowercase'])
-    files = [os.path.join(parameters['dataset_dir'], item) for item in ['gpt2_train.txt', 'gpt2_test.txt', 'gpt2_dev.txt']]
-    tokenizer.train( 
-                    files, 
-                    vocab_size=parameters['vocab_size'], 
-                    min_frequency=parameters['min_frequency'], 
-                    show_progress=True, 
-                    special_tokens=["<s>", "<pad>", "</s>", "<unk>", "<mask>"])
-    tokenizer.enable_truncation(max_length=512)
-    print(tokenizer.encode("<s> The dog ran <mask> outside . <unk> </s> <pad>").tokens) # --> ['<s>', 'Ġ', '<mask>', 'Ġ.', 'Ġ', '<unk>', 'Ġ', '</s>', 'Ġ', '<pad>']
-    print(tokenizer.encode("<s> <mask> . <unk> </s> <pad>").ids) # --> [0, 225, 4, 272, 225, 3, 225, 2, 225, 1]
-
-    processor.set_tokenizer(tokenizer)
-    #paths = sorted(glob.glob(os.path.join(parameters['output_dir'], 'checkpoint_*')))
-    paths = [parameters['model_path']] if parameters['model_path'] is not None else sorted(glob.glob(os.path.join(parameters['output_dir'], 'end-epoch*')))
+    paths = sorted(glob.glob(os.path.join(parameters['output_dir'], 'end-epoch*')))
+    paths = [p for p in paths if 'split' not in p]
         
     # Setting environment for the tokenizer not to interefere with future parallelisation
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     logging.info("\tDone.")
     
     nb_splits = parameters['nb_splits']
-    data_paths = processor.get_data(data, 'test')
-    data = processor.load_object(batch_path)
-    examples = [processor.create_examples(data[i:i + self.context_size + 2]) for i, _ in tqdm(enumerate(data[:-self.context_size -2]))]
-    features = [torch.FloatTensor(example).unsqueeze(0).to(torch.int64) for example in tqdm(examples)]
-    input_ids = torch.cat(features, dim=0)
-    data = TensorDataset(input_ids)
-    sampler = RandomSampler(data)
-    dataloader = DataLoader(data, sampler=sampler, batch_size=parameters['batch_size'])
+    data_paths = processor.get_data(data, 'dev')
 
     logging.info("\tDone.")
     
@@ -105,8 +80,10 @@ if __name__=='__main__':
                                         None, device, 
                                         parameters['metric_name'], 
                                         None,
-                                        parameters['use_output_mask'])
-    evaluation_stats  = []
+                                        parameters['use_output_mask'],
+                                        context_size=parameters['context_size']
+                                    )
+    testing_stats  = []
     
     try:
         for path in paths:
@@ -122,18 +99,17 @@ if __name__=='__main__':
             )
             model_processor.model.to(device)
             accuracy, loss = None, None
-            accuracy, loss, time, report = model_processor.evaluate(processor, features_paths, parameters['todo'], parameters) 
-            evaluation_stats.append({
-                        'Loss': loss,
-                        'Accur.': accuracy,
-                        'Time': time,
-                        'model_path': path,
-                        'report': report})
-            df = pd.DataFrame(data=evaluation_stats)
-            df.to_csv(os.path.join(parameters['output_dir'], f"{parameters['output_name']}_evaluation.csv"), index=False)
-        df = pd.DataFrame(data=evaluation_stats)
-        df.to_csv(os.path.join(parameters['output_dir'], f"{parameters['output_name']}_evaluation.csv"), index=False)
-        logging.info("\tDone.")
+            
+            logging.info("Evaluation report: ")
+            test_loss, test_time = model_processor.evaluate(processor, data_paths, 'dev', parameters) 
+            testing_stats.append({
+                        'Valid. Loss': test_loss,
+                        #'Active Test. Loss': active_test_loss,
+                        'Valid. Time': test_time,
+                    })
+            df = pd.DataFrame(data=testing_stats)
+            df.to_csv(os.path.join(parameters['output_dir'], 'validation_stats.csv'), index=False)
+            logging.info("\tDone.")
 
     except KeyboardInterrupt:
         print('-' * 89)

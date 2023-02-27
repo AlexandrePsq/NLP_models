@@ -123,7 +123,7 @@ class LMProcessor(DataProcessor):
     
     def create_examples(self, sequence):
         """Returns list of InputExample objects."""
-        #input_id = self.pad_to_max_length([0] + sequence + [225, 2])
+        #input_id = self.pad_to_max_length([0] + sequence + [1, 2]) ### HERE ###
         input_id = self.pad_to_max_length([50256] + sequence + [220, 50256])
         #attention_mask = self.pad_attention_to_max_length([1] + sequence + [1, 1])
         return input_id #, attention_mask
@@ -184,12 +184,12 @@ class LMProcessor(DataProcessor):
         else:
             print(f'Careful - {sequence} - is not of {len(sequence)} (!= max length)... Padding...')
             sequence = sequence[:self.max_seq_length]
-            #result = sequence + [225, 1] * ((self.max_seq_length - n)// 2)
+            #result = sequence + [1] * ((self.max_seq_length - n)// 2) ### HERE ###
             result = sequence + [220, 50256] * ((self.max_seq_length - n)// 2)
             if len(result)==self.max_seq_length:
                 return result
             else:
-                #return result + [225]
+                #return result + [1] ### HERE ###
                 return result + [220]
         
     def pad_attention_to_max_length(self, sequence):

@@ -20,7 +20,7 @@ special_words = {
 }
 
 
-def tokenize(path, language, train=False, vocab=None):
+def tokenize(path, language, train=False, vocab=None, convert_numbers=None):
     """ Tokenize a text into sentences.
     Optionnaly preprocess it.
     Arguments:
@@ -35,7 +35,7 @@ def tokenize(path, language, train=False, vocab=None):
 
     if not train:
         print('Preprocessing...')
-        text = preprocess(path, special_words, language)
+        text = preprocess(path, special_words, language, convert_numbers=convert_numbers)
         print('Preprocessed.')
     else:
         text = path

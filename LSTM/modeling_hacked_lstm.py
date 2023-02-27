@@ -82,10 +82,12 @@ class RNNModel(nn.Module):
         an uniform distribution and zero for the bias 
         of the decoder.
         """
-        initrange = 0.1
+        initrange = 0.1 #
         self.encoder.weight.data.uniform_(-initrange, initrange)
+        #self.encoder.weight.data.normal_(mean=0.0, std=initrange)
         self.decoder.bias.data.zero_()
         self.decoder.weight.data.uniform_(-initrange, initrange)
+        #self.decoder.weight.data.normal_(mean=0.0, std=initrange)
 
     def forward(self, inp, hidden):
         """ Concatenate the encoder, the recurrent neural 

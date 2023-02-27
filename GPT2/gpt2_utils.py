@@ -19,6 +19,11 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from transformers import AdamW, GPT2Config, get_linear_schedule_with_warmup
 from transformers import GPT2Tokenizer, GPT2Model, GPT2LMHeadModel, WEIGHTS_NAME, CONFIG_NAME
 
+
+morphs = ['AdvType=Ex', 'Aspect=Perf|Tense=Past|VerbForm=Part', 'Aspect=Prog|Tense=Pres|VerbForm=Part', 'Case=Acc|Gender=Fem|Number=Sing|Person=3|PronType=Prs', 'Case=Acc|Gender=Fem|Number=Sing|Person=3|PronType=Prs|Reflex=Yes', 'Case=Acc|Gender=Masc|Number=Sing|Person=3|PronType=Prs', 'Case=Acc|Gender=Masc|Number=Sing|Person=3|PronType=Prs|Reflex=Yes', 'Case=Acc|Gender=Neut|Number=Sing|Person=3|PronType=Prs|Reflex=Yes', 'Case=Acc|Number=Plur|Person=1|PronType=Prs', 'Case=Acc|Number=Plur|Person=1|PronType=Prs|Reflex=Yes', 'Case=Acc|Number=Plur|Person=3|PronType=Prs', 'Case=Acc|Number=Plur|Person=3|PronType=Prs|Reflex=Yes', 'Case=Acc|Number=Sing|Person=1|PronType=Prs', 'Case=Acc|Number=Sing|Person=1|PronType=Prs|Reflex=Yes', 'Case=Acc|Person=2|PronType=Prs|Reflex=Yes', 'Case=Nom|Gender=Fem|Number=Sing|Person=3|PronType=Prs', 'Case=Nom|Gender=Masc|Number=Sing|Person=3|PronType=Prs', 'Case=Nom|Number=Plur|Person=1|PronType=Prs', 'Case=Nom|Number=Plur|Person=3|PronType=Prs', 'Case=Nom|Number=Sing|Person=1|PronType=Prs', 'ConjType=Cmp', 'Definite=Def|PronType=Art', 'Definite=Ind|PronType=Art', 'Degree=Cmp', 'Degree=Pos', 'Degree=Sup', 'Foreign=Yes', 'Gender=Fem|Number=Sing|Person=3|Poss=Yes|PronType=Prs', 'Gender=Fem|Number=Sing|Person=3|Poss=Yes|PronType=Prs|Reflex=Yes', 'Gender=Masc|Number=Sing|Person=3|Poss=Yes|PronType=Prs', 'Gender=Masc|Number=Sing|Person=3|Poss=Yes|PronType=Prs|Reflex=Yes', 'Gender=Neut|Number=Sing|Person=3|Poss=Yes|PronType=Prs', 'Gender=Neut|Number=Sing|Person=3|PronType=Prs', 'Hyph=Yes', 'Mood=Ind|Number=Sing|Person=3|Tense=Past|VerbForm=Fin', 'Mood=Ind|Number=Sing|Person=3|Tense=Pres|VerbForm=Fin', 'Mood=Ind|Person=1|Tense=Pres|VerbForm=Fin', 'Mood=Ind|Tense=Pres|VerbForm=Fin', 'None', 'NounType=Prop|Number=Plur', 'NounType=Prop|Number=Sing', 'NumType=Card', 'NumType=Ord', 'Number=Plur', 'Number=Plur|Person=1|Poss=Yes|PronType=Prs', 'Number=Plur|Person=1|Poss=Yes|PronType=Prs|Reflex=Yes', 'Number=Plur|Person=2|Poss=Yes|PronType=Prs|Reflex=Yes', 'Number=Plur|Person=3|Poss=Yes|PronType=Prs', 'Number=Plur|Person=3|Poss=Yes|PronType=Prs|Reflex=Yes', 'Number=Plur|PronType=Dem', 'Number=Sing', 'Number=Sing|Person=1|Poss=Yes|PronType=Prs', 'Number=Sing|Person=1|Poss=Yes|PronType=Prs|Reflex=Yes', 'Number=Sing|Person=Three|Tense=Pres|VerbForm=Fin', 'Number=Sing|PronType=Dem', 'Person=2|Poss=Yes|PronType=Prs', 'Person=2|PronType=Prs', 'Poss=Yes', 'Poss=Yes|PronType=Prs', 'PronType=Dem', 'PronType=Prs', 'PunctSide=Fin|PunctType=Brck', 'PunctSide=Fin|PunctType=Quot', 'PunctSide=Ini|PunctType=Brck', 'PunctSide=Ini|PunctType=Quot', 'PunctType=Comm', 'PunctType=Dash', 'PunctType=Peri', 'Tense=Past|VerbForm=Fin', 'Tense=Past|VerbForm=Part', 'Tense=Pres|VerbForm=Fin', 'VerbForm=Fin', 'VerbForm=Inf', 'VerbType=Mod', 'Gender=Neut|Number=Sing|Person=3|Poss=Yes|PronType=Prs|Reflex=Yes', 'Case=Nom|Gender=Neut|Number=Sing|Person=3|PronType=Prs', 'Case=Acc|Person=2|PronType=Prs', 'Case=Nom|Person=2|PronType=Prs', 'Case=Acc|Gender=Neut|Number=Sing|Person=3|PronType=Prs']
+pos = ['PUNCT', 'ADV', 'AUX', 'SYM', 'ADP', 'SCONJ', 'VERB', 'X', 'PART', 'DET', 'NUM', 'NOUN', 'PRON', 'ADJ', 'CCONJ', 'PROPN', 'INTJ', 'SPACE']
+
+
 #########################################
 ############ Basic functions ############
 #########################################
@@ -123,7 +128,7 @@ def pad_to_max_length(sequence, max_seq_length, space=220, special_token_end=502
 
 def create_examples(sequence, max_seq_length, space=220, special_token_beg=50256, special_token_end=50256):
     """Returns list of InputExample objects."""
-    return pad_to_max_length([special_token_beg] + sequence + [space, special_token_end], max_seq_length)
+    return pad_to_max_length([special_token_beg] + sequence + [space, special_token_end], max_seq_length, space=space, special_token_end=special_token_end)
 
 
 def save(model, tokenizer, output_dir, index):
@@ -146,6 +151,37 @@ def save(model, tokenizer, output_dir, index):
     model_to_save.config.to_json_file(output_config_file)
     #tokenizer.save_pretrained(output_dir)
     
+
+def extract_syntax(doc): 
+    """Extract number of closing nodes for each words of an input sequence. 
+    """ 
+    ncn = [] 
+    morph = []
+    pos_ = []
+    for sent in doc.sents: 
+        parsed_string = sent._.parse_string 
+        words = sent.text.split(' ') 
+        for token in sent: 
+            m = str(morphs.index(str(token.morph))) if str(token.morph)!='' else '0'
+            if len(m)==1:
+                m = '0' + m
+            morph.append(m)
+            p = str(pos.index(token.pos_))
+            if len(p)==1:
+                p = '0' + p
+            pos_.append(p)
+            word = token.text+')' 
+            index = parsed_string.find(word)
+            l = len(word) 
+            count = 1 
+            i = index+l 
+            while i<len(parsed_string) and parsed_string[i]==')' :
+                count+=1
+                i+=1
+            ncn.append(str(min(count, 9))) # we take into account a maximum of 9 closing parenthesis
+            parsed_string = parsed_string[i:] 
+    return [int(''.join(items)) for items in list(zip(ncn, morph, pos_))]
+
 def tryint(s):
     try:
         return int(s)
@@ -540,7 +576,7 @@ def batchify_sentences(
     return batch, indexes
 
 
-def batchify_pos_input(data, context_size=None, max_seq_length=512):
+def batchify_pos_input(data, context_size=None, max_seq_length=512, special_token_beg=0, special_token_end=2, space=1):
     """Batchify sentence 'iterator' string, to get batches of sentences with a specific number of tokens per input.
     Function used with 'get_truncated_activations'.
     Arguments:
@@ -554,9 +590,9 @@ def batchify_pos_input(data, context_size=None, max_seq_length=512):
     max_seq_length = max_seq_length if context_size is None else context_size+5 # +5 because of the special tokens + the current and following tokens
     
     if context_size==0:
-        examples = [create_examples(data[i:i + 2], max_seq_length, special_token_beg=0, special_token_end=2, space=225) for i, _ in enumerate(data)]
+        examples = [create_examples(data[i:i + 2], max_seq_length, special_token_beg=special_token_beg, special_token_end=special_token_end, space=space) for i, _ in enumerate(data)]
     else:
-        examples = [create_examples(data[i:i + context_size + 2], max_seq_length, special_token_beg=0, special_token_end=2, space=225) for i, _ in enumerate(data[:-context_size])]
+        examples = [create_examples(data[i:i + context_size + 2], max_seq_length, special_token_beg=special_token_beg, special_token_end=special_token_end, space=space) for i, _ in enumerate(data[:-context_size])]
     # the last example in examples has one element less from the input data, but it is compensated by the padding. we consider that the element following the last input token is the special token.
     features = [torch.FloatTensor(example).unsqueeze(0).to(torch.int64) for example in examples]
     input_ids = torch.cat(features, dim=0)

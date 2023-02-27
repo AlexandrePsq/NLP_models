@@ -59,6 +59,10 @@ class BertExtractor(object):
         bert_utils.set_seed(seed)
         if randomize:
             parameters = bert_utils.read_yaml(config_path)
+            try:
+                parameters['layer_norm_eps'] = float(parameters['layer_norm_eps'])
+            except:
+                print("No 'layer_norm_eps' parameter defined... using default when instantiating model.")
             self.model = BertModel(BertConfig(**parameters))
             #bert_utils2.randomize_model(self.model)
         elif config_path is None:

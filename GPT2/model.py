@@ -11,9 +11,14 @@ import torch
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+import spacy
+import benepar
 from spacy.symbols import ORTH
+from benepar import BeneparComponent
+
 from transformers import GPT2Tokenizer, GPT2Config
 
+import utils
 import gpt2_utils
 from modeling_hacked_gpt2 import GPT2Model, GPT2LMHeadModel
 syntax = __import__('04_syntax_generator')
@@ -136,12 +141,91 @@ class GPT2Extractor(object):
         elif 'pos' in self.prediction_type:
             activations = self.get_pos_activations(iterator, language)
 
+        elif 'syntax' in self.prediction_type:
+            activations = self.get_syntax_activations(iterator, language)
+           
+        elif 'sentence' in self.prediction_type:
+            activations = self.get_classic_activations(iterator, language)
+
         hidden_states_activations = activations[0] 
         attention_heads_activations = activations[1] 
 
         return [hidden_states_activations, 
                 attention_heads_activations]
     
+    
+    def get_syntax_activations(self, iterator, language, bsz=16, space=1, special_token_beg=0, special_token_end=2):
+        """Extract hidden state activations of the model for each token from the input, based on truncated input.
+        Arguments: 
+            - iterator: iterator object
+            - language: str
+        Returns:
+            - result: pd.DataFrame containing activation (+ optionally entropy
+            and surprisal)
+        """
+        hidden_states_activations = []
+        attention_heads_activations = []
+        benepar.download('benepar_en3')
+
+        nlp = spacy.load("en_core_web_lg")
+        print('Careful: English version is hard-coded. Only use it for english text !!')
+        nlp.remove_pipe("ner")
+        nlp.max_length = np.inf
+        special_case = [{ORTH: "hasnt"}]
+        nlp.tokenizer.add_special_case("hasnt", special_case)
+
+        nlp.add_pipe('benepar', config={'model': 'benepar_en3'})
+        print(nlp.pipe_names)
+        data_folder = '/neurospin/unicog/protocols/IRMf/LePetitPrince_Pallier_2018/LePetitPrince/data/text/english/all_training'
+        transform = utils.read_yaml(os.path.join(data_folder, 'syntax-id_to_train-id.yml'))
+
+        docs = [nlp(sent) for sent in iterator]
+        sentences = [doc.text.split(' ') for doc in docs]
+        activations = [gpt2_utils.extract_syntax(doc) for doc in docs]
+        iterator = []
+        for index, activ in enumerate(activations):
+            tmp = []
+            for i, value in enumerate(activ):
+                if value in transform.keys():
+                    tmp.append(transform[value]+5)
+                else:
+                    print(value, '-', sentences[index][i])
+            iterator.append(tmp)
+        iterator = [i for l in iterator for i in l]
+        mapping = {i:[i] for i, j in enumerate(iterator)}
+
+        print(f"Using context length of {self.config['context_length']}.")
+
+        input_ids, indexes = gpt2_utils.batchify_pos_input(iterator, context_size=self.config['context_length'], max_seq_length=self.config['max_length'], special_token_beg=0, special_token_end=2, space=1)
+
+        with torch.no_grad():
+            hidden_states_activations_ = []
+            for input_tmp in tqdm(input_ids.chunk(input_ids.size(0)//bsz)):
+                hidden_states_activations_tmp = []
+                encoded_layers = self.model(input_tmp, output_hidden_states=True)
+                hidden_states_activations_tmp = np.stack([i.detach().numpy() for i in encoded_layers.hidden_states], axis=0) #shape: (#nb_layers, batch_size_tmp, max_seq_length, hidden_state_dimension)
+                hidden_states_activations_.append(hidden_states_activations_tmp)
+
+            hidden_states_activations_ = np.swapaxes(np.vstack([np.swapaxes(item, 0, 1) for item in hidden_states_activations_]), 0, 1) #shape: (#nb_layers, batch_size, max_seq_length, hidden_state_dimension)
+
+        activations = []
+        for i in range(hidden_states_activations_.shape[1]):
+            index = indexes[i]
+            activations.append([hidden_states_activations_[:, i, j, :] for j in range(index[0], index[1])])
+        activations = np.stack([i for l in activations for i in l], axis=0)
+        activations = np.swapaxes(activations, 0, 1) #shape: (#nb_layers, batch_size, hidden_state_dimension)
+
+        for word_index in range(len(mapping.keys())):
+            word_activation = []
+            word_activation.append([activations[:, index, :] for index in mapping[word_index]])
+            word_activation = np.vstack(word_activation)
+            hidden_states_activations.append(np.mean(word_activation, axis=0).reshape(-1))# list of elements of shape: (#nb_layers, hidden_state_dimension).reshape(-1)
+        #After vstacking it will be of shape: (batch_size, #nb_layers*hidden_state_dimension)
+
+        hidden_states_activations = pd.DataFrame(np.vstack(hidden_states_activations), columns=['hidden_state-layer-{}-{}'.format(layer, index) for layer in np.arange(1 + self.NUM_HIDDEN_LAYERS) for index in range(1, 1 + self.FEATURE_COUNT)])
+
+        return [hidden_states_activations, 
+                attention_heads_activations]
     
     def get_truncated_activations(self, iterator, language, bsz=32, space='Ġ', special_token_beg='<|endoftext|>', special_token_end='<|endoftext|>'):
         """Extract hidden state activations of the model for each token from the input, based on truncated input.

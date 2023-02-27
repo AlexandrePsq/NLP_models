@@ -80,7 +80,6 @@ if __name__=='__main__':
                         output_attentions=parameters['output_attentions'], # Whether the model returns attentions weights.
                         output_hidden_states=parameters['output_hidden_states'], # Whether the model returns all hidden-states.
             )
-            
     if parameters['tokenizer_from_scratch']:
         tokenizer = ByteLevelBPETokenizer( 
                         lowercase=parameters['lowercase'])
@@ -104,16 +103,22 @@ if __name__=='__main__':
     processor.set_tokenizer(tokenizer)
     
     model, start_at_dataloader = load_last_checkpoint(parameters, model=model)
-    model.to(device)
+
+    if parameters['device_map'] is not None:
+        device_map = parameters['device_map']
+        model.parallelize(device_map)
+        print(f'Using device_map: {device_map}')
+    else:
+        model.to(device)
     
     # Setting environment for the tokenizer not to interefere with future parallelisation
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     logging.info("\tDone.")
     
     logging.info("Get input data...")
-    train_data_paths = processor.get_data(data, 'train')
-    dev_data_paths = processor.get_data(data, 'dev')
-    test_data_paths = processor.get_data(data, 'test')
+    train_data_paths = processor.get_data(data, 'train') if parameters['do_train'] else None
+    dev_data_paths = processor.get_data(data, 'dev') if parameters['do_validation'] else None
+    test_data_paths = processor.get_data(data, 'test') if parameters['do_test'] else None
     logging.info("\tDone.")
     
     logging.info("Creating optimizer and learning rate scheduler...")
@@ -170,23 +175,21 @@ if __name__=='__main__':
         training_stats = pd.read_csv(os.path.join(parameters['output_dir'], 'training_stats.csv'))
         print('Exiting from training early')
     
-    logging.info("Validation reports: ")
-    for epoch, stat in training_stats.iterrows():
-        logging.info(stat['report'])
+    #logging.info("Validation reports: ")
+    #for epoch, stat in training_stats.iterrows():
+    #    logging.info(stat['report'])
     test_accuracy, test_loss = None, None
     
     if parameters['do_test']:
         logging.info("Evaluation report: ")
-        test_accuracy, test_loss, test_time, report = model_processor.evaluate(processor, test_data_paths, 'test', parameters) 
+        test_loss, test_time = model_processor.evaluate(processor, test_data_paths, 'test', parameters) 
         testing_stats = [{
                     'Test. Loss': test_loss,
-                    'Test. Accur.': test_accuracy,
                     'Test Time': test_time,
-                    'report': report
                 }]
         df = pd.DataFrame(data=testing_stats)
         df.to_csv(os.path.join(parameters['output_dir'], 'testing_stats.csv'), index=False)
-        logging.info(df['report'].iloc[0])
+        #logging.info(df['report'].iloc[0])
     logging.info("\tDone.")
 
     logging.info("Plotting training and validation losses...")

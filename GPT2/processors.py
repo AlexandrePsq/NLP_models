@@ -104,8 +104,8 @@ class ModelProcessor(object):
         input_ids = batch[0].to(torch.int64).to(self.device)
         #attention_mask = batch[1].to(torch.int64).to(self.device)
         #attention_mask = self.attention_mask_from_inputs(batch[0], self.context_size).to(torch.int64).to(self.device)
-        attention_mask = torch.ones(batch[0].size()).to(torch.int64).to(self.device)
-        token_type_ids = torch.zeros(input_ids.size()).to(torch.int64).to(self.device) #batch[1].to(torch.int64).to(self.device)
+        attention_mask = None #torch.ones(batch[0].size()).to(torch.int64).to(self.device)
+        token_type_ids = None #torch.zeros(input_ids.size()).to(torch.int64).to(self.device) #batch[1].to(torch.int64).to(self.device)
         labels_ids = input_ids.clone() #batch[2].to(torch.int64).to(self.device)
 
         self.model.zero_grad()        
@@ -253,15 +253,13 @@ class ModelProcessor(object):
                     df.to_csv(os.path.join(output_dir, 'training_stats.csv'), index=False)
                 
                 if parameters['do_validation']:
-                    avg_val_accuracy, avg_val_loss, validation_time, report = self.evaluate(data_processor, validation_features_paths, 'dev', parameters=parameters)
+                    val_loss, val_time = self.evaluate(data_processor, validation_features_paths, 'dev', parameters=parameters)
                     # Record all statistics from this epoch.
                     validation_stats.append(
                         {
                             'epoch': epoch_i + 1,
-                            'Valid. Loss': avg_val_loss,
-                            'Valid. Accur.': avg_val_accuracy,
-                            'Validation Time': validation_time,
-                            'report': report,
+                            'Valid. Loss': val_loss,
+                            'Validation Time': val_time,
                         }
                     )
                     df = pd.DataFrame(data=validation_stats)
@@ -280,14 +278,12 @@ class ModelProcessor(object):
                     except:
                         if (epoch_i+1) >= parameters['start_epoch']:
                             logging.info(f"... but computing the validation loss for previous epoch number {epoch_i}...")
-                            avg_val_accuracy, avg_val_loss, validation_time, report = self.evaluate(data_processor, validation_features_paths, 'dev', parameters=parameters)
+                            val_loss, val_time = self.evaluate(data_processor, validation_features_paths, 'dev', parameters=parameters)
                             validation_stats.append(
                                 {
                                     'epoch': epoch_i + 1,
-                                    'Valid. Loss': avg_val_loss,
-                                    'Valid. Accur.': avg_val_accuracy,
-                                    'Validation Time': validation_time,
-                                    'report': report,
+                                    'Valid. Loss': val_loss,
+                                    'Validation Time': val_time,
                                 }
                             )
                             df = pd.DataFrame(data=validation_stats)
@@ -312,6 +308,7 @@ class ModelProcessor(object):
         # Tracking variables 
         total_eval_accuracy = 0
         total_eval_loss = 0
+        total_active_loss = 0
         nb_eval_steps = 0
         loss_fct = CrossEntropyLoss()
         
@@ -335,7 +332,7 @@ class ModelProcessor(object):
             #attention_masks = torch.cat(masks, dim=0)
             data = TensorDataset(input_ids)#, attention_masks)
             sampler = RandomSampler(data)
-            dataloader = DataLoader(data, sampler=sampler, batch_size=parameters['batch_size'])
+            dataloader = DataLoader(data, sampler=sampler, batch_size=parameters['batch_size_eval'])
 
             logging.info("\tDone.")
             nb_batchs += len(dataloader)
@@ -343,7 +340,7 @@ class ModelProcessor(object):
             split_label_ids = []
             split_active_loss = []
             
-            for batch in dataloader:
+            for batch in tqdm(dataloader):
                 # `batch` contains three pytorch tensors:
                 #   [0]: input ids 
                 ##   [1]: attention masks   # was removed
@@ -356,14 +353,10 @@ class ModelProcessor(object):
                 attention_mask = torch.ones(batch[0].size()).to(torch.int64).to(self.device)
                 token_type_ids = torch.zeros(input_ids.size()).to(torch.int64).to(self.device) #batch[1].to(torch.int64).to(self.device)
                 label_ids = input_ids.clone() #batch[2].to(torch.int64).to(self.device)
+                label_ids[:, 0] = -100
+                label_ids[:, -2] = -100
+                label_ids[:, -1] = -100
                 #active_loss = (attention_mask == 1)
-                if self.use_output_mask:
-                    output_mask = batch[3].numpy()
-                    active_loss = (output_mask == 1)
-                else:
-                    active_loss = np.ones(label_ids.shape)
-                    active_loss = (active_loss == 1)
-                split_active_loss.append(active_loss)
                 
                 with torch.no_grad():        
                     # The documentation for the BERT `models` are here: 
@@ -372,59 +365,70 @@ class ModelProcessor(object):
                                         token_type_ids=token_type_ids, 
                                         attention_mask=attention_mask,
                                         labels=label_ids)
-                loss = outputs[0] 
-                logits = outputs[1]
+                total_eval_loss += outputs[0].item()
+                #logits = outputs[1][:, :-2, :] # we remove the 2 special tokens at the end
+                #label_ids = label_ids[..., 1:].contiguous()[:, :-2] # we remove the 2 special tokens at the end
+                #if self.use_output_mask:
+                #    output_mask = batch[3].numpy()
+                #    active_loss = (output_mask == 1)
+                #else:
+                #    active_loss = np.ones(label_ids.shape)
+                #    active_loss[label_ids==50256] = 0
+                #    active_loss[label_ids==220] = 0
+                #    active_loss = (active_loss == 1)
+                #split_active_loss.append(active_loss)
                 # Accumulate the validation loss.
                 
                 ## Shift so that tokens < n predict n
                 #shift_logits = logits[active_loss][..., :-1, :].contiguous()
                 #shift_labels = label_ids[active_loss][..., 1:].contiguous()
                 ## Flatten the tokens
-                #loss_fct = CrossEntropyLoss()
-                #loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+                
+                #total_active_loss += loss_fct(logits.view(-1, logits.size(-1)), label_ids.view(-1)).item()
 
                 ## Move logits and labels to CPU
-                split_logits.append(np.argmax(logits.detach().cpu().numpy(), axis=-1))
-                split_label_ids.append(label_ids.to('cpu').numpy())
+                #split_logits.append(np.argmax(logits.detach().cpu().numpy(), axis=-1)[:, 1:-1])
+                #split_label_ids.append(label_ids.to('cpu').numpy())
                 
-            logits = np.vstack(split_logits)
-            label_ids = np.vstack(split_label_ids)
-            active_loss = np.vstack(split_active_loss)
+            #logits = np.vstack(split_logits)
+            #label_ids = np.vstack(split_label_ids)
+            #active_loss = np.vstack(split_active_loss)
         
-            pred_flat = logits[active_loss].flatten()
-            labels_flat = label_ids[active_loss].flatten()
-            logging.info(f"Saving predictions and labels in {os.path.join(parameters['output_dir'], 'tmp')}...")
-            np.save(os.path.join(parameters['output_dir'], 'tmp', f'pred_flat_{split_index}.npy'), pred_flat)
-            np.save(os.path.join(parameters['output_dir'], 'tmp', f'labels_flat_{split_index}.npy'), labels_flat)
+            #pred_flat = logits[active_loss].flatten()
+            #labels_flat = label_ids[active_loss].flatten()
+            #logging.info(f"Saving predictions and labels in {os.path.join(parameters['output_dir'], 'tmp')}...")
+            #np.save(os.path.join(parameters['output_dir'], 'tmp', f'pred_flat_{split_index}.npy'), pred_flat)
+            #np.save(os.path.join(parameters['output_dir'], 'tmp', f'labels_flat_{split_index}.npy'), labels_flat)
             # Cleaning
-            logging.info("Cleaning...")
-            del pred_flat
-            del labels_flat
-            del logits
-            del label_ids
-            del active_loss
+            #logging.info("Cleaning...")
+            #del pred_flat
+            #del labels_flat
+            #del logits
+            #del label_ids
+            #del active_loss
             
         # Merging Predicitons and labels
-        logging.info(f"[{utils.get_timestamp()}] - Loading computed predictions and labels & merging...")
-        pred_flat = np.hstack([np.load(os.path.join(parameters['output_dir'], 'tmp', f'pred_flat_{split_index}.npy')) for split_index in range(len(validation_features_paths))])
-        labels_flat = np.hstack([np.load(os.path.join(parameters['output_dir'], 'tmp', f'labels_flat_{split_index}.npy')) for split_index in range(len(validation_features_paths))])
+        #logging.info(f"[{utils.get_timestamp()}] - Loading computed predictions and labels & merging...")
+        #pred_flat = np.hstack([np.load(os.path.join(parameters['output_dir'], 'tmp', f'pred_flat_{split_index}.npy')) for split_index in range(len(validation_features_paths))])
+        #labels_flat = np.hstack([np.load(os.path.join(parameters['output_dir'], 'tmp', f'labels_flat_{split_index}.npy')) for split_index in range(len(validation_features_paths))])
 
         # Calculate the accuracy for this batch of test sentences, and
         # accumulate it over all batches.
-        logging.info(f"[{utils.get_timestamp()}] - Computing accuracy...")
-        total_eval_accuracy = Metrics.flat_accuracy(labels_flat, pred_flat)
+        #logging.info(f"[{utils.get_timestamp()}] - Computing accuracy...")
+        #total_eval_accuracy = Metrics.flat_accuracy(labels_flat, pred_flat)
 
         # Report results
-        logging.info(f"[{utils.get_timestamp()}] - Computing report...")
-        report = Metrics.report(self.metric_name, labels_flat, pred_flat)
+        #logging.info(f"[{utils.get_timestamp()}] - Computing report...")
+        #report = Metrics.report(self.metric_name, labels_flat, pred_flat)
         #print(report)
         # Report the final accuracy for this validation run.
-        avg_val_accuracy = total_eval_accuracy / nb_batchs
-        print("  Accuracy: {0:.2f}".format(avg_val_accuracy))
-        logging.info("  Accuracy: {0:.2f}".format(avg_val_accuracy))
+        #avg_val_accuracy = total_eval_accuracy / nb_batchs
+        #print("  Accuracy: {0:.2f}".format(avg_val_accuracy))
+        #logging.info("  Accuracy: {0:.2f}".format(avg_val_accuracy))
 
         # Calculate the average loss over all of the batches.
         avg_val_loss = total_eval_loss / nb_batchs
+        #avg_active_loss = total_active_loss / nb_batchs
         
         # Measure how long the validation run took.
         validation_time = format_time(time.time() - t0)
@@ -435,7 +439,8 @@ class ModelProcessor(object):
         logging.info("  Validation took: {:}".format(validation_time))
         
         # Cleaning
-        shutil.rmtree(os.path.join(parameters['output_dir'], 'tmp'))
+        #shutil.rmtree(os.path.join(parameters['output_dir'], 'tmp'))
         
-        return avg_val_accuracy, avg_val_loss, validation_time, report
+        #return avg_val_accuracy, avg_val_loss, validation_time, report
+        return avg_val_loss, validation_time
             

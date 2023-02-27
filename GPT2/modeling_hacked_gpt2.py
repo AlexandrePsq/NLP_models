@@ -184,7 +184,7 @@ class GPT2Attention(nn.Module):
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
         
-        ##### HERE ####
+        ####### HERE ####
         #seq_length = query.size()[2]
         #position_ids_l = torch.arange(seq_length, dtype=torch.long, device=key.device).view(-1, 1)
         #position_ids_r = torch.arange(seq_length, dtype=torch.long, device=key.device).view(1, -1)
@@ -193,7 +193,7 @@ class GPT2Attention(nn.Module):
         #positional_embedding = positional_embedding.to(dtype=key.dtype)  # fp16 compatibility
         #relative_position_scores = torch.einsum("bhld,lrd->bhlr", key, positional_embedding)
         #attn_weights = attn_weights + relative_position_scores
-        ##### HERE ####
+        ####### HERE ####
 
         if self.scale_attn_weights:
             attn_weights = attn_weights / (float(value.size(-1)) ** 0.5)
@@ -204,18 +204,18 @@ class GPT2Attention(nn.Module):
             causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
             attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
 
-        ##### control context: apply masking before softmax
-        #if attention_mask is not None:
-        #    # Apply the attention mask
-        #    attn_weights = attn_weights + attention_mask
-        #####
+        #### control context: apply masking before softmax
+        if attention_mask is not None:
+            # Apply the attention mask
+            attn_weights = attn_weights + attention_mask
+        ####
         
         attn_weights = nn.Softmax(dim=-1)(attn_weights)
-        ##### control context: apply masking after softmax
-        if attention_mask is not None:
-            attention_mask = torch.div(attention_mask, 10000) + 1.0
-            attn_weights = torch.mul(attn_weights, attention_mask)
-        #####
+        ###### control context: apply masking after softmax
+        #if attention_mask is not None:
+        #    attention_mask = torch.div(attention_mask, 10000) + 1.0
+        #    attn_weights = torch.mul(attn_weights, attention_mask)
+        ######
         attn_weights = self.attn_dropout(attn_weights)
 
         # Mask heads if we want to
@@ -602,6 +602,7 @@ class GPT2Model(GPT2PreTrainedModel):
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         #### HERE REMOVE COMMENT ####
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
+        ############
 
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([GPT2Block(config) for _ in range(config.num_hidden_layers)])
@@ -609,10 +610,10 @@ class GPT2Model(GPT2PreTrainedModel):
 
         self.init_weights()
         
-        #### HERE REMOVE COMMENT ####
+        #### HERE ####
         #print('CAREFUL: POSITION EMBEDDINGS WERE REMOVED !!!! ADD THEM BACK !!')
         #print("/!\/!\/!\ CAREFUL USING RELATIVE POSITION EMBEDDING IN ATTENTION SCORES /!\/!\/!\ ")
-        #### HERE REMOVE COMMENT ####
+        #### HERE ####
 
         # Model parallel
         self.model_parallel = False
@@ -664,13 +665,13 @@ class GPT2Model(GPT2PreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.h[layer].attn.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPastAndCrossAttentions,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    #@add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
+    #@add_code_sample_docstrings(
+    #    tokenizer_class=_TOKENIZER_FOR_DOC,
+    #    checkpoint=_CHECKPOINT_FOR_DOC,
+    #    output_type=BaseModelOutputWithPastAndCrossAttentions,
+    #    config_class=_CONFIG_FOR_DOC,
+    #)
     def forward(
         self,
         input_ids=None,
@@ -943,13 +944,13 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             "token_type_ids": token_type_ids,
         }
 
-    @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutputWithCrossAttentions,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    #@add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
+    #@add_code_sample_docstrings(
+    #    tokenizer_class=_TOKENIZER_FOR_DOC,
+    #    checkpoint=_CHECKPOINT_FOR_DOC,
+    #    output_type=CausalLMOutputWithCrossAttentions,
+    #    config_class=_CONFIG_FOR_DOC,
+    #)
     def forward(
         self,
         input_ids=None,
@@ -1271,13 +1272,13 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
         self.model_parallel = False
         self.device_map = None
 
-    @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="microsoft/DialogRPT-updown",
-        output_type=SequenceClassifierOutputWithPast,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    #@add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
+    #@add_code_sample_docstrings(
+    #    tokenizer_class=_TOKENIZER_FOR_DOC,
+    #    checkpoint="microsoft/DialogRPT-updown",
+    #    output_type=SequenceClassifierOutputWithPast,
+    #    config_class=_CONFIG_FOR_DOC,
+    #)
     def forward(
         self,
         input_ids=None,
