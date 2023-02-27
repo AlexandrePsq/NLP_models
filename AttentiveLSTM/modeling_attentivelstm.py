@@ -1,7 +1,10 @@
+import os
 import time
 import math
 import torch
 import pickle
+import pickle5 as pickle5
+import scipy
 import numpy as np
 from tqdm import tqdm
 import torch.nn as nn
@@ -22,7 +25,7 @@ losses = {
 
 config = {
     'hidden_size': 768,
-    'loss': [nn.CrossEntropyLoss(), None, nn.CrossEntropyLoss(), nn.CrossEntropyLoss()],
+    'loss': [nn.CrossEntropyLoss(), None],
     'vocab_size': 50257,
     'pad_token_id': 50256,
     'num_hidden_layers': 1,
@@ -37,13 +40,13 @@ config = {
     'activation_function_c': 'sigmoid',
     'activation_function_f': 'sigmoid',
     'activation_function_o': 'sigmoid',
-    'proj_head': [1, None, 1, 1],
+    'proj_head': [1, None],
     'log_interval': 200,
-    'bsz': 5,
-    'clip': 1.0,
+    'bsz': 100,
+    'clip': 0.25, #1.0,
     'layer_norm_eps':  1e-05,
     'embedding_dropout_prob': 0.1,
-    'learning_rate': 1e-4,
+    'learning_rate': 1e-3, #20
     'adam_epsilon': 1e-8,
     'num_warmup_steps': 0,
 }
@@ -122,27 +125,60 @@ class AttentiveLSTM(nn.Module):
         initrange = 0.1
         self.embedding.weight.data.uniform_(-initrange, initrange)
 
-    def forward(self, input_word, network_hidden_states, network_cell_states):
+    def forward(self, dataloader, network_hidden_states, network_cell_states):
         """
         Args:
-            - input_word: str
+            - input_id: str
             - network_hidden_states: list
             - network_cell_states: list
         Returns:
             - 
         """
         # attention à bien gérer les hidden-states dans le forward !
-        dummy_input = input_word.view()
-        input_hidden_state = self.embedding(input_word)
-        for index_layer, layer in enumerate(self.layers):
-            hidden_states = [input_hidden_state, ] + network_hidden_states
-            current_cell_state = network_cell_states[index_layer]
-            current_hidden_state = network_hidden_states[index_layer]
-            new_hidden, new_cell = layer(current_hidden_state, hidden_states, current_cell_state)
-            network_hidden_states[index_layer] = new_hidden
-            network_cell_states[index_layer] = new_cell
-        self.lm_head()
-        raise NotImplementedError()
+        start_time = time.time()
+        #self.train()
+        for index_batch, (batch, ground_truth) in enumerate(dataloader):
+            input_hidden_states = self.embedding(batch)
+            # Starting each batch, we detach the hidden state from how it was previously produced.
+            # If we didn't, the model would try backpropagating all the way to start of the dataset.
+            input_hidden_states = repackage_hidden(input_hidden_states)
+            network_hidden_states = [repackage_hidden(item) for item in network_hidden_states]
+            network_cell_states = [repackage_hidden(item) for item in network_cell_states]
+            self.zero_grad()
+            # attention à bien gérer les hidden-states dans le forward !
+            for index_layer, (layer, loss, proj_head) in enumerate(zip(self.layers, self.loss_fcts, self.proj_heads)):
+                hidden_states = [input_hidden_states, ] + network_hidden_states
+                current_cell_state = network_cell_states[index_layer]
+                current_hidden_state = network_hidden_states[index_layer]
+                new_hidden, new_cell = layer(current_hidden_state, hidden_states, current_cell_state)
+                network_hidden_states[index_layer] = new_hidden
+                network_cell_states[index_layer] = new_cell
+                if proj_head is not None:
+                    predictions = proj_head(new_hidden)
+                    loss_ = loss(predictions.view(-1, predictions.size(-1)), ground_truth.view(-1))
+                    print(loss_)
+                    #print(np.argmax(nn.Softmax(dim=-1)(predictions).detach().numpy(), axis=-1), ground_truth)
+                    #if index_batch % 50 == 0 and index_batch > 0:
+                    loss_.backward(retain_graph=True)
+                    self.losses[index_layer] += loss_.item()
+
+            nn.utils.clip_grad_norm_(self.parameters(), self.config.clip)
+            #loss_.backward()
+            #for p in self.parameters():
+            #    print(p.grad)
+            #if index_batch % 50 == 0 and index_batch > 0:
+            optimizer.step()
+            scheduler.step()
+            
+            if index_batch % self.config.log_interval == 0 and index_batch > 0:
+                cur_loss = sum(self.losses) / self.config.log_interval
+                elapsed = time.time() - start_time
+                print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.2f} | ms/batch {:5.2f} | '
+                        'loss {:5.2f} | ppl {:8.2f}'.format(
+                    epoch, index_batch, len(dataloader), self.config.lr,
+                    elapsed * 1000 / self.config.log_interval, cur_loss, math.exp(cur_loss)))
+                self.losses = [0 for layer_index in range(self.config.num_hidden_layers)]
+                start_time = time.time()
 
     def train(self, dataloader, epoch):
         """
@@ -164,14 +200,14 @@ class AttentiveLSTM(nn.Module):
         start_time = time.time()
         #self.train()
         network_hidden_states, network_cell_states = self.init_hidden(self.config.num_hidden_layers, self.config.bsz, self.config.hidden_size)
+        optimizer.zero_grad()
         for index_batch, (batch, ground_truth) in enumerate(dataloader):
             input_hidden_states = self.embedding(batch)
             # Starting each batch, we detach the hidden state from how it was previously produced.
             # If we didn't, the model would try backpropagating all the way to start of the dataset.
-            input_hidden_states = repackage_hidden(input_hidden_states)
-            network_hidden_states = [repackage_hidden(item) for item in network_hidden_states]
-            network_cell_states = [repackage_hidden(item) for item in network_cell_states]
-            self.zero_grad()
+            #input_hidden_states = repackage_hidden(input_hidden_states)
+            #network_hidden_states = [repackage_hidden(item) for item in network_hidden_states]
+            #network_cell_states = [repackage_hidden(item) for item in network_cell_states]
             # attention à bien gérer les hidden-states dans le forward !
             for index_layer, (layer, loss, proj_head) in enumerate(zip(self.layers, self.loss_fcts, self.proj_heads)):
                 hidden_states = [input_hidden_states, ] + network_hidden_states
@@ -182,20 +218,22 @@ class AttentiveLSTM(nn.Module):
                 network_cell_states[index_layer] = new_cell
                 if proj_head is not None:
                     predictions = proj_head(new_hidden)
-                    print(loss)
-
                     loss_ = loss(predictions.view(-1, predictions.size(-1)), ground_truth.view(-1))
                     print(loss_)
-                    print(np.argmax(nn.Softmax(dim=-1)(predictions).detach().numpy(), axis=-1), ground_truth)
+                    #print(np.argmax(nn.Softmax(dim=-1)(predictions).detach().numpy(), axis=-1), ground_truth)
+                    #if index_batch % 50 == 0 and index_batch > 0:
                     loss_.backward(retain_graph=True)
                     self.losses[index_layer] += loss_.item()
 
             nn.utils.clip_grad_norm_(self.parameters(), self.config.clip)
             #loss_.backward()
-            for p in self.parameters():
-                print(p.grad)
+            #for p in self.parameters():
+            #    print(p.grad)
+            
             optimizer.step()
             scheduler.step()
+            if index_batch % 100 == 0 and index_batch > 0:
+                optimizer.zero_grad()
             
             if index_batch % self.config.log_interval == 0 and index_batch > 0:
                 cur_loss = sum(self.losses) / self.config.log_interval
@@ -217,15 +255,15 @@ class AttentiveLSTM(nn.Module):
             - torch.Variable (or tuple of torch.Variable)
         """
         factory_kwargs = {'device': self.config.device, 'dtype': self.config.dtype}
-        hidden_states = [torch.nn.Parameter(torch.empty((bsz, self.config.hidden_size), **factory_kwargs)) for i in range(num_hidden_layers)]
-        cell_states = [torch.nn.Parameter(torch.empty((bsz, self.config.hidden_size), **factory_kwargs)) for i in range(num_hidden_layers)]
+        hidden_states = [torch.nn.Parameter(torch.zeros((bsz, self.config.hidden_size), **factory_kwargs)) for i in range(num_hidden_layers)]
+        cell_states = [torch.nn.Parameter(torch.zeros((bsz, self.config.hidden_size), **factory_kwargs)) for i in range(num_hidden_layers)]
         return hidden_states, cell_states
 
 
 class Layer(nn.Module):
     """
     """
-    def __init__(self, config):
+    def __init__(self, config, code=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]):
         super().__init__()
         config = AttrDict(config)
         self.ln_1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon).double()
@@ -235,7 +273,82 @@ class Layer(nn.Module):
         #self.act = ACT2FN[config.activation_function]
         #self.c_proj = Conv1D(config.hidden_size, config.intermediate_size) # Conv1D(out_features, in_features)
         self.dropout = nn.Dropout(config.dropout)
-        self.lstm_cell = LSTMCell(config)
+        self.lstm_cell = LSTMCell(config, code=code[4:])
+    
+    def _init_bias(self, bias):
+        nn.init.constant_(bias, 0.0)
+
+    def _init_weights(self, m):
+        """Initialize the weights."""
+        classname = m.__class__.__name__
+        if classname.find("Linear") != -1:
+            if hasattr(m, "weight") and m.weight is not None:
+                self._init_weight(m.weight)
+            if hasattr(m, "bias") and m.bias is not None:
+                self._init_bias(m.bias)
+        elif classname.find("AdaptiveEmbedding") != -1:
+            if hasattr(m, "emb_projs"):
+                for i in range(len(m.emb_projs)):
+                    if m.emb_projs[i] is not None:
+                        nn.init.normal_(m.emb_projs[i], 0.0, self.config.proj_init_std)
+        elif classname.find("Embedding") != -1:
+            if hasattr(m, "weight"):
+                self._init_weight(m.weight)
+        elif classname.find("ProjectedAdaptiveLogSoftmax") != -1:
+            if hasattr(m, "cluster_weight") and m.cluster_weight is not None:
+                self._init_weight(m.cluster_weight)
+            if hasattr(m, "cluster_bias") and m.cluster_bias is not None:
+                self._init_bias(m.cluster_bias)
+            if hasattr(m, "out_projs"):
+                for i in range(len(m.out_projs)):
+                    if m.out_projs[i] is not None:
+                        nn.init.normal_(m.out_projs[i], 0.0, self.config.proj_init_std)
+        elif classname.find("LayerNorm") != -1:
+            if hasattr(m, "weight"):
+                nn.init.normal_(m.weight, 1.0, self.config.init_std)
+            if hasattr(m, "bias") and m.bias is not None:
+                self._init_bias(m.bias)
+        else:
+            if hasattr(m, "r_emb"):
+                self._init_weight(m.r_emb)
+            if hasattr(m, "r_w_bias"):
+                self._init_weight(m.r_w_bias)
+            if hasattr(m, "r_r_bias"):
+                self._init_weight(m.r_r_bias)
+            if hasattr(m, "r_bias"):
+                self._init_bias(m.r_bias)
+    
+    def init_mems(self, bsz):
+        if self.mem_len > 0:
+            mems = []
+            param = next(self.parameters())
+            for i in range(self.n_layer):
+                empty = torch.zeros(self.mem_len, bsz, self.config.d_model, dtype=param.dtype, device=param.device)
+                mems.append(empty)
+
+            return mems
+        else:
+            return None
+
+    def _update_mems(self, hids, mems, mlen, qlen):
+        # does not deal with None
+        if mems is None:
+            return None
+
+        # mems is not None
+        assert len(hids) == len(mems), "len(hids) != len(mems)"
+
+        # There are `mlen + qlen` steps that can be cached into mems
+        with torch.no_grad():
+            new_mems = []
+            end_idx = mlen + max(0, qlen)
+            beg_idx = max(0, end_idx - self.mem_len)
+            for i in range(len(hids)):
+
+                cat = torch.cat([mems[i], hids[i]], dim=0)
+                new_mems.append(cat[beg_idx:end_idx].detach())
+
+        return new_mems
 
     def forward(self, layer_hidden_state, hidden_states, cell_state, mask=None):
         """
@@ -367,7 +480,7 @@ class Attention(nn.Module):
 class LSTMCell(nn.Module):
     """
     """
-    def __init__(self, config):
+    def __init__(self, config, code=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]):
         super().__init__()
         config = AttrDict(config)
         gate_size = 4 * config.hidden_size
@@ -440,8 +553,14 @@ def create_dataloader_next_word_pred(input_path, context_size, bsz, train=False)
     Returns:
         - dataloader
     """
-    with open(input_path, 'rb') as inp:  # Overwrites any existing file.
-        data = pickle.load(inp)
+    if  isinstance(input_path, str) and os.path.exists(input_path):
+        with open(input_path, 'rb') as inp:  # Overwrites any existing file.
+            try:
+                data = pickle.load(inp)
+            except:
+                data = pickle5.load(inp)
+    else:
+        data = input_path
     examples = [[item] for item in tqdm(data)]
     features = [torch.LongTensor(example).unsqueeze(0).to(torch.int64) for example in tqdm(examples)]
     input_ids = torch.cat(features, dim=0)

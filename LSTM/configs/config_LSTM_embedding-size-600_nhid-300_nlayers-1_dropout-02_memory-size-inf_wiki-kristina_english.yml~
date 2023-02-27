@@ -1,0 +1,22 @@
+cuda: true
+dropout: 0.2
+eos_separator: <eos>
+includ_entropy: true
+includ_surprisal: true
+language: english
+memory_size: .inf
+nhid: 300
+ninp: 600
+nlayers: 1
+ntoken: 50001
+parameters:
+- in
+- forget
+- out
+- c_tilde
+- hidden
+- cell
+path_to_vocab: /neurospin/unicog/protocols/IRMf/LePetitPrince_Pallier_2018/LePetitPrince/data/text/english/lstm_training/wikipedia
+rnn_type: LSTM
+tie_weights: false
+weights_path: /neurospin/unicog/protocols/IRMf/LePetitPrince_Pallier_2018/LePetitPrince/derivatives/fMRI/models/english/weights_LSTM_embedding-size-600_nhid-300_nlayers-1_dropout-02_memory-size-inf_wiki-kristina_english.pt
